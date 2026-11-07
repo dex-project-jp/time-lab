@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict'),{inspect,summary}=require('./core.js');
+const row=(times,extra={})=>({times,reviewed:true,am:false,pm:false,...extra});
+let r=row(['05:00','08:25','16:00','19:30']);
+assert.equal(inspect(r).minutes,415);
+let s=summary([r,r],'hourly',1200);assert.equal(s.minutes,830);assert.equal(s.payroll,840);assert.equal(s.wage,16800);
+assert.equal(summary([row(['06:00','06:01','','']),row(['06:00','06:01','',''])],'hourly',1200).payroll,15);
+assert.equal(summary([row(['06:00','06:15','',''])],'hourly',1200).payroll,15);
+assert.equal(summary([row(['06:00','06:16','',''])],'hourly',1200).payroll,30);
+assert.ok(inspect(row(['09:00','08:00','',''])).errors.length);
+assert.ok(inspect(row(['09:00','','',''])).errors.length);
+assert.ok(inspect(row(['05:00','09:00','08:00','12:00'])).errors.length);
+assert.equal(summary([row(['05:00','08:00','',''],{reviewed:false})],'hourly',1200).minutes,0);
+s=summary([row(['','','',''],{am:true,pm:true}),row(['','','',''],{am:true}),row(['','','',''],{pm:true}),row(['','','',''])],'daily',0);assert.equal(s.days,2);assert.equal(s.full,1);assert.equal(s.half,2);
+assert.equal(inspect(row(['23:00','01:00','',''])).errors.length,1);
+console.log('12 attendance assertions passed');
