@@ -1,4 +1,4 @@
-const CACHE='time-lab-v0.3.0';
+const CACHE='time-lab-v0.3.1';
 const ASSETS=['./','./index.html','./style.css','./app.js','./core.js','./enhancements.js','./ocr-core.js','./import-core.js','./v03.js','./manifest.webmanifest','./icon.svg','./icon.png','./icon-512.png','./vendor/tesseract.min.js','./vendor/worker.min.js','./vendor/tesseract-core-lstm.wasm.js','./vendor/tesseract-core-lstm.wasm','./vendor/eng.traineddata.gz'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS))));
 self.addEventListener('message',e=>{if(e.data==='SKIP_WAITING')self.skipWaiting()});
