@@ -1,0 +1,25 @@
+const assert=require('node:assert/strict');global.ImportCore=require('./import-core');const P=require('./period-core'),T=require('./core');let n=0;function test(name,fn){fn();n++;console.log('OK',name)}
+const empty=()=>({version:1,employees:[{id:'a',name:'A',mode:'hourly',rate:1200},{id:'b',name:'B',mode:'daily',rate:0},{id:'c',name:'C',mode:'daily',rate:0}],months:{},selected:'a',month:'2026-11'}),json=(rows,more={})=>JSON.stringify({payrollMonth:'2026-11',employeeId:'a',rows,...more}),r=date=>({date,times:['04:30','08:00','14:00','18:00']});
+test('November period October16 to November15',()=>{let p=P.period('2026-11');assert.equal(p.start,'2026-10-16');assert.equal(p.end,'2026-11-15');assert.equal(p.dates.length,31)});
+test('January previous year',()=>assert.equal(P.period('2027-01').start,'2026-12-16'));
+test('Leap year',()=>assert.equal(P.period('2028-03').dates.length,29));
+test('invalid salary month',()=>assert.throws(()=>P.period('2026-13')));
+test('Full dates across two months accepted',()=>assert.deepEqual(P.parse(json([r('2026-10-16'),r('2026-11-01')]),'2026-11','a').map(r=>r.month),['2026-10','2026-11']));
+test('Code block copy paste accepted',()=>assert.equal(P.parse('結果\n```json\n'+json([r('2026-10-16')])+'\n```','2026-11','a').length,1));
+test('Reject another employee',()=>assert.throws(()=>P.parse(json([r('2026-10-16')]),'2026-11','b'),/従業員/));
+test('Reject salary month mismatch',()=>assert.throws(()=>P.parse(json([r('2026-10-16')]),'2026-12','a'),/給与対象月/));
+test('Reject impossible date',()=>assert.throws(()=>P.parse(json([r('2026-10-32')]),'2026-11','a'),/存在/));
+test('Reject date/day mismatch',()=>assert.throws(()=>P.parse(json([{...r('2026-10-16'),day:17}]),'2026-11','a'),/一致/));
+test('Reject outside payroll period',()=>assert.throws(()=>P.parse(json([r('2026-10-15')]),'2026-11','a'),/期間/));
+test('Reject duplicate full date',()=>assert.throws(()=>P.parse(json([r('2026-10-16'),r('2026-10-16')]),'2026-11','a'),/重複/));
+test('Reject malformed four columns',()=>assert.throws(()=>P.parse(json([{date:'2026-10-16',times:['04:30']}]),'2026-11','a'),/4要素/));
+test('Reject invalid afternoon and boolean',()=>assert.throws(()=>P.parse(json([{...r('2026-10-16'),pm:false}]),'2026-11','a'),/出勤なし/));
+test('Explicit date legacy calendar import',()=>assert.equal(ImportCore.parse(JSON.stringify({month:'2026-10',rows:[r('2026-10-16')]}),'2026-10','',31)[0].day,16));
+test('Calendar rejects cross-month date',()=>assert.throws(()=>ImportCore.parse(JSON.stringify({month:'2026-11',rows:[r('2026-10-16')]}),'2026-11','',31),/暦月/));
+test('Idempotent two-month merge; 3 employees isolated',()=>{let s=empty(),records=P.parse(json([r('2026-10-16'),r('2026-11-01')]),'2026-11','a');assert.equal(P.apply(s,'a','2026-11',records).added,2);let before=JSON.stringify(s);assert.equal(P.apply(s,'a','2026-11',records).skipped,2);assert.equal(JSON.stringify(s),before);assert.equal(Object.keys(s.months).length,2);assert.equal(P.rows(s,'b','2026-11').filter(r=>r.times.some(Boolean)).length,0);assert.equal(P.rows(s,'c','2026-11').filter(r=>r.times.some(Boolean)).length,0);assert.equal(s.version,1);assert.equal(s.months['a:2026-10'].rows[16].reviewed,false)});
+test('Protect reviewed existing row',()=>{let s=empty();s.months['a:2026-10']={rows:{16:{day:16,times:['','','',''],am:true,pm:true,reviewed:true,original:[]}},images:[]};let old=JSON.stringify(s.months);P.apply(s,'a','2026-11',P.parse(json([r('2026-10-16')]),'2026-11','a'));assert.equal(JSON.stringify(s.months),old)});
+test('Combine actual minutes then round once',()=>{let s=empty();for(let [m,d,t]of [['2026-10',16,['05:00','08:01','','']],['2026-11',1,['05:00','08:14','','']]])s.months['a:'+m]={rows:{[d]:{day:d,times:t,reviewed:true,am:true,pm:false}}};let v=T.summary(P.rows(s,'a','2026-11'),'hourly',1200);assert.equal(v.minutes,375);assert.equal(v.payroll,375);assert.equal(v.wage,7500)});
+test('Daily AM PM half-days and exclude unconfirmed',()=>{let s=empty();s.months['b:2026-10']={rows:{16:{day:16,times:['','','',''],am:true,pm:true,reviewed:true}}};s.months['b:2026-11']={rows:{1:{day:1,times:['','','',''],am:false,pm:true,reviewed:true},2:{day:2,times:['','','',''],am:true,pm:true,reviewed:false}}};assert.equal(T.summary(P.rows(s,'b','2026-11'),'daily',0).days,1.5)});
+test('No mutation while computing salary view',()=>{let s=empty(),before=JSON.stringify(s);P.rows(s,'a','2026-11');assert.equal(JSON.stringify(s),before)});
+test('Prompt matches parser dates and employee ID',()=>{let q=P.prompt('2026-11','a');assert.match(q,/2026-10-16〜2026-11-15/);assert.match(q,/"employeeId":"a"/)});
+console.log(n+' v0.4 payroll period / JSON / data protection checks passed');
