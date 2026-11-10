@@ -15,7 +15,7 @@ $('#shareMonth').onclick=async()=>{try{let obj={version:1,employees:[employee()]
 const button=document.querySelector('#checkAppUpdate'),status=document.querySelector('#appUpdateStatus');if(!button||!status)return;
 let busy=false,reloading=false;
 const tell=message=>{status.textContent=message};
-function watch(reg){const offer=()=>{if(!busy&&reg.waiting){button.textContent='↻ 更新版を適用';tell('新しい版があります。「更新版を適用」で保存して切り替えます。')}};offer();reg.addEventListener('updatefound',()=>{const worker=reg.installing;if(worker)worker.addEventListener('statechange',offer)})}
+function watch(reg){const offer=()=>{if(!busy&&reg.waiting&&(!status.textContent||status.textContent.includes('最新版です'))){button.textContent='↻ 更新版を適用';tell('新しい版があります。「更新版を適用」で保存して切り替えます。')}};offer();reg.addEventListener('updatefound',()=>{const worker=reg.installing;if(worker)worker.addEventListener('statechange',offer)})}
 function pendingWork(){if(document.querySelector('#scanner')?.open||document.querySelector('#tableEditor')?.open)return true;
 if(typeof tableDraft!=='undefined'&&tableDraft){return tableDraft.rows.some(r=>{const saved=state.months[tableDraft.id+':'+r.date.slice(0,7)]?.rows[+r.date.slice(8)];return !saved||JSON.stringify(saved.times)!==JSON.stringify(r.times.map(t=>t||''))||saved.reviewed!==!!r.confirmed||saved.am!==r.am||saved.pm!==r.pm})}
 if(document.querySelector('#tableInput')?.value.trim())return true;
