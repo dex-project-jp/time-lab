@@ -11,4 +11,6 @@ test('daily AM PM half days',()=>{let s=state(),rows=read(text).map(r=>({...r,co
 test('no overwrite and employee separation',()=>{let s=state(),rows=read(text).map(r=>({...r,confirmed:true}));T.apply(s,e.id,'2026-11',rows);let before=JSON.stringify(s.months);assert.equal(T.apply(s,e.id,'2026-11',rows).skipped,2);assert.equal(JSON.stringify(s.months),before);s.employees.push({...e,id:'b'.repeat(32)});T.apply(s,'b'.repeat(32),'2026-11',rows);assert.ok(s.months['b'.repeat(32)+':2026-10'])});
 test('incomplete cannot be confirmed atomic',()=>{let s=state(),r=read(head+'|2026-10-16|06:00||||');r[0].confirmed=true;assert.throws(()=>T.apply(s,e.id,'2026-11',r));assert.deepEqual(s.months,{})});
 test('bad edited duplicate rejected atomically',()=>{let s=state(),rows=read(text);rows[1].date=rows[0].date;assert.throws(()=>T.apply(s,e.id,'2026-11',rows));assert.deepEqual(s.months,{})});
+test('partial actual format remains unconfirmed',()=>{let s=state(),rows=read(head+'|2026-10-16|06:00||||');rows[0].am=true;T.apply(s,e.id,'2026-11',rows);assert.equal(s.months[e.id+':2026-10'].rows[16].reviewed,false)});
+test('edited value retains original analysis text',()=>{let s=state(),rows=read(text);rows[0].times[1]='09:12';T.apply(s,e.id,'2026-11',rows);assert.equal(s.months[e.id+':2026-10'].rows[16].original[1].text,'09:11')});
 console.log(n+' table tests passed');
