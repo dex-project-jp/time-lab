@@ -82,3 +82,14 @@ Safariのサイトデータ削除やOSによる領域回収、配信URLの変更
 Tesseract.js 6.0.1 / Tesseract.js-core 6.0.0: Apache-2.0。vendor内のライセンス参照。
 英語traineddata: Tesseract tessdata (Apache-2.0)。モデルは配布元の4.0.0/eng.traineddata.gz。
 アプリコードのライセンスは未指定です。
+
+
+## v0.2 (2026-11-10)
+- IndexedDB time-lab / version 1 / data / stateとバックアップversion:1を維持。既存フィールド変更なし、payroll・history・画像内の比較候補を任意追加。
+- 表全体OCRに加え、各打刻列を2倍拡大して再認識。欠損の候補補充、方式間の不一致を要確認にする。実カードでの改善率は未測定。
+- 写真の共有/保存、ChatGPT依頼文コピー、対象月・日付・4時刻の厳格なJSON検証、日別比較と採用。既存値の置換は確認後、履歴保存。ChatGPTへはユーザーが手動添付。有料APIなし。
+- 複数画像を従業員・月へ統合。月間JSONは写真を含む。共有先・個人情報は送信前に確認。
+- 給与明細のA4印刷・ブラウザPDF保存。日給月給は「月額×出勤日数÷所定日数」の参考計算。手当・控除は手入力。税・保険・割増賃金の自動計算なし。
+- 更新版が待機中なら「更新版を適用」で保存後に切替。
+- 検証: node tests.cjs / node enhancements-tests.cjs。iPhone実機・実カードのOCR精度測定は別途必要。
+- main変更前の完全アーカイブ: time-lab-main-backup-20261110.zip（元コミット ca0f8190d79796d5cd91c8fd519dc557e8acffca）。
