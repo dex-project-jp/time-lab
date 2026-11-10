@@ -139,6 +139,6 @@ node tests.cjs（12）/ enhancements-tests.cjs（11）/ v03-tests.cjs（25）/ v
 
 ### 検証
 
-従来56項目に加え、`node v04-tests.cjs`（22）と`node v04-integration-tests.cjs`（12）を実行。給与期間の年越し・うるう年・月をまたぐJSON・3名の分離・重複防止・既存値保護・合算後丸め・確認ガード・v1バックアップ・明細を検証。iPhone Safari実機はこの環境では操作できず、実機検証は未実施。Web共有・カメラ撮影・ホーム追加・PDF送信は実機確認が必要。
+従来56項目に加え、`node v04-tests.cjs`（22）と`node v04-integration-tests.cjs`（14）を実行。給与期間の年越し・うるう年・月をまたぐJSON・3名の分離・重複防止・既存値保護・合算後丸め・確認ガード・v1バックアップ・明細を検証。iPhone Safari実機はこの環境では操作できず、実機検証は未実施。Web共有・カメラ撮影・ホーム追加・PDF送信は実機確認が必要。
 
 変更前main完全ZIP: `time-lab-v03-before-v04.zip`（e17fd379cd110cbdcdbc9534a8ef72b8cba7d815）。写真や個人の勤怠データは含まない。
