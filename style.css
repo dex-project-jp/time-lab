@@ -47,3 +47,8 @@ details>summary{list-style:none;cursor:pointer;min-height:48px;display:flex;alig
   #periodSlip .slip09 p{margin:2mm 0}
   #periodSlip .slip09 td,#periodSlip .slip09 th{padding:1.2mm}
 }
+
+[hidden] { display: none !important; }
+.deductionLine11 { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.deduction11 input:not([type=checkbox]), .deduction11 select, .deduction11 button { min-height: 44px; }
+.deduction11 input[type=checkbox] { width: 24px; height: 24px; }

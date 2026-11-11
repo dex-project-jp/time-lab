@@ -17,7 +17,7 @@ livePay = function () {
   const plan = employeePlan();
   const rows = PeriodCore.rows(state, employee().id, salaryMonth());
   return PayrollExtras.calculate(period, extrasFor09(period), plan, rows, taxFor(period.settings.taxYear),
-    employeeHistory().length ? plan.specialSalary : undefined);
+    employeeHistory().length ? plan.specialSalary : undefined, true);
 };
 
 payRows = function (side, period, result) {
@@ -109,7 +109,7 @@ renderPay07 = function (keepRows = false) {
     for (const key of ['housing','utilities']) {
       const item = PayrollExtras.find(result.deductions,key);
       document.querySelector('[data-deduction-status10="'+key+'"]').textContent = !extra[key].enabled ? 'OFF · 0円' :
-        item?.amount == null ? '要確認 · 根拠を入力し、確認にチェック' : '確認済み · '+yen(item.amount);
+        yen(item?.amount ?? 0);
     }
     if (result.gross === null) $('#pay07Reference').textContent = '支給の入力待ち。税・保険・Excel照合額は支給がそろうと計算します。';
   } catch {
@@ -129,15 +129,15 @@ async function editExtras09(event) {
     if (input.type === 'number') {
       if (!input.validity.valid) throw Error('入力範囲を確認してください');
       value = input.value === '' && ['n','days'].includes(field) ? null :
-        field === 'days' ? Number(input.value) : PayrollCore.money(input.value);
+        field === 'days' ? Number(input.value) : PayrollCore.money(input.value || 0);
     }
     extras[key][field] = value;
     if (key === 'special' && ['enabled','n'].includes(field)) extras.special.formula = true;
     if (key === 'leave') {
       extras.leave.touched = true;
-      if (field === 'enabled') extras.leave.confirmed = false;
+
     }
-    if (['housing','utilities'].includes(key) && field !== 'confirmed' && extrasFor09(period)[key][field] !== value) extras[key].confirmed = false;
+    
     period.extras09 = extras;
     const profiles = payStore().extraProfiles09 ??= {};
     const profile = profiles[employee().id] ??= {};
@@ -345,17 +345,15 @@ $('#periodPrint').onclick = function () {
       ${items.map(item => `<tr><td>${esc(earningName(item))}</td><td>${yen(item.amount)}</td></tr>`).join('')}
       <tr><th>${title}総額</th><th>${yen(total)}</th></tr></tbody></table>`;
     const day = result.dayPay;
-    const deductionNote = (calc, note) => result.deductions.some(item => item.overrideFor === calc)
-      ? '手動入力（明細の金額を使用）' : note || '要確認';
     $('#periodSlipBody').innerHTML = `<article class="slip09">
       <h1>${p.month} 給与明細</h1>
       <p><strong>${esc(employee().name)}</strong>　${saved ? '確定済み' : '確認用プレビュー・未確定'}</p>
       <p>対象期間 ${p.start}〜${p.end}　支払日 ${esc(result.settings.payDate)}</p>
       <p>${day ? `通常出勤 ${day.regularDays}日　土曜出勤 ${day.saturdayDays}日` : `実働 ${hm(result.summary.minutes)}　給与計算用 ${hm(result.summary.payroll)}`}</p>
       <div class="slipTables09">${table('支給',result.earnings,result.gross)}${table('控除',result.deductions,result.deductionTotal)}</div>
-      <p>確認済み控除小計　<strong>${yen(result.knownDeduction ?? result.deductionTotal ?? 0)}</strong></p>
+      ${result.deductionTotal === null ? `<p>確認済み控除小計　<strong>${yen(result.knownDeduction ?? result.deductionTotal ?? 0)}</strong></p>` : ''}
       <p class="slipNet09">差引支給額　<strong>${yen(result.net)}</strong></p>
-      <p>所得税　${esc(deductionNote('income',result.tax.note))}<br>雇用保険　${esc(deductionNote('employment',result.ei.note))}</p>
+
       ${result.errors.length ? `<p>要確認　${esc(result.errors.join(' / '))}</p>` : ''}
     </article>`;
     document.body.classList.add('period-print');

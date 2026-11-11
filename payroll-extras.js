@@ -24,15 +24,16 @@ function defaults(period, profile = {}, mode, fresh = false) {
   };
 }
 
-function calculate(period, extras, plan, rows, table, legacySpecial) {
+function calculate(period, extras, plan, rows, table, legacySpecial, simple = false) {
   const effective = structuredClone(period);
   const issues = [];
+  if (simple) effective.settings.simplePayroll11 = true;
   const otherSocial = period.settings.otherSocial10;
-  if (otherSocial === null) issues.push('社会保険料等の金額を入力してください');
+  if (!simple && otherSocial === null) issues.push('社会保険料等の金額を入力してください');
   if (otherSocial > 0) {
     const alreadyListed = effective.deductions.some(item => item.socialInsurance && item.amount > 0 && item.overrideFor !== 'employment');
     if (alreadyListed) issues.push('社会保険料等が既存の控除と重複しています。内訳を確認してください');
-    else if (!period.settings.socialConfirmed) issues.push('社会保険料等の金額を確認してください');
+    else if (!simple && !period.settings.socialConfirmed) issues.push('社会保険料等の金額を確認してください');
     else effective.deductions.push({id:'social10',name:'社会保険料等（雇用保険以外）',kind:'statutory',calc:'manual',
       amount:money(otherSocial),socialInsurance:true});
   }
@@ -41,18 +42,18 @@ function calculate(period, extras, plan, rows, table, legacySpecial) {
   let specialAmount = !special.formula ? (legacySpecial ?? oldSpecial?.amount ?? 0) : 0;
   if (!special.enabled && special.formula) specialAmount = 0;
   if (special.formula && special.enabled) {
-    if (special.n === null) {
+    if (special.n === null && !simple) {
       specialAmount = null;
       issues.push('特別給与の n を入力してください');
     } else {
-      specialAmount = money(money(special.a) * money(special.n) + money(special.b), labels.special);
+      specialAmount = money(money(special.a) * money(special.n ?? 0) + money(special.b), labels.special);
     }
   }
 
   let leaveAmount = 0;
   if (extras.leave.enabled) {
     try {
-      leaveAmount = calculateLeave(extras.leave, plan, rows, period.month);
+      leaveAmount = simple ? calculateLeave11(extras.leave, plan.rate) : calculateLeave(extras.leave, plan, rows, period.month);
     } catch (error) {
       leaveAmount = null;
       issues.push(error.message);
@@ -79,7 +80,7 @@ function calculate(period, extras, plan, rows, table, legacySpecial) {
     const item = extras[key];
     replace(effective.deductions, key, {
       calc:'manual', kind:'voluntary', amount:item.enabled ? money(item.amount) : 0,
-      reason:item.reason, legalConfirmed:item.confirmed, socialInsurance:false, overrideFor:undefined
+      reason:item.reason, legalConfirmed:item.confirmed, enabled:item.enabled, socialInsurance:false, overrideFor:undefined
     });
   }
   let duplicate = false;
@@ -116,6 +117,12 @@ function calculate(period, extras, plan, rows, table, legacySpecial) {
   result.knownDeduction = result.deductions.reduce((sum, item) => sum + (item.amount ?? 0), 0);
   result.extras09 = structuredClone(extras);
   return result;
+}
+
+function calculateLeave11(leave, rate) {
+  const days = leave.days ?? 0;
+  if (!Number.isFinite(days) || days < 0 || days > 31 || !Number.isInteger(days * 2)) throw Error('有給日数は0〜31日の0.5日単位で入力してください');
+  return money(Math.round(rate * 8 * days), labels.leave);
 }
 
 function calculateLeave(leave, plan, rows, month) {
@@ -162,6 +169,16 @@ function validateStore(store, employees) {
     if (!object(store.extraProfiles09)) throw Error('従業員の支給・控除設定が不正です');
     for (const [id, profile] of Object.entries(store.extraProfiles09)) {
       if (!ids.has(id) || !object(profile)) throw Error('支給・控除設定の従業員が不正です');
+      if (profile.deductionItems11 !== undefined) {
+        if (!object(profile.deductionItems11) || Object.keys(profile.deductionItems11).length > 100) throw Error('翌月用控除設定が不正です');
+        for (const [key,item] of Object.entries(profile.deductionItems11)) {
+          if (item === null) continue;
+          if (!object(item) || key !== item.id || typeof item.name !== 'string' || !item.name.trim() ||
+              item.name.length > 80 || !['manual','income','employment'].includes(item.calc) ||
+              !['statutory','voluntary'].includes(item.kind)) throw Error('翌月用控除項目が不正です');
+          money(item.amount);
+        }
+      }
       for (const key of ['a','b']) if (profile[key] !== undefined) money(profile[key]);
       for (const key of ['housing','utilities']) if (profile[key] !== undefined) deduction(profile[key]);
     }
