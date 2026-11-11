@@ -59,6 +59,7 @@ deductionPanel09.innerHTML = ['housing','utilities'].map(key => `
   <fieldset><legend>${PayrollExtras.labels[key]}</legend>
     <label><input type="checkbox" data-extra09="${key}.enabled"> 控除する</label>
     <label>金額（円） <input type="number" inputmode="numeric" min="0" step="1" data-extra09="${key}.amount"></label>
+    <output data-deduction-status10="${key}"></output>
     <details><summary>控除の根拠を確認</summary>
       <label>賃金控除協定などの根拠 <input type="text" maxlength="200" data-extra09="${key}.reason"></label>
       <label><input type="checkbox" data-extra09="${key}.confirmed"> 適法な控除根拠を確認した</label>
@@ -105,6 +106,11 @@ renderPay07 = function (keepRows = false) {
     const preview = extra.leave.enabled && extra.leave.days !== null ? employeePlan().rate * 8 * extra.leave.days : null;
     $('#leaveAmount09').textContent = leave === null && preview !== null
       ? '参考 ' + yen(preview) + '（取得日と算定方式の確認待ち）' : yen(leave);
+    for (const key of ['housing','utilities']) {
+      const item = PayrollExtras.find(result.deductions,key);
+      document.querySelector('[data-deduction-status10="'+key+'"]').textContent = !extra[key].enabled ? 'OFF · 0円' :
+        item?.amount == null ? '要確認 · 根拠を入力し、確認にチェック' : '確認済み · '+yen(item.amount);
+    }
     if (result.gross === null) $('#pay07Reference').textContent = '支給の入力待ち。税・保険・Excel照合額は支給がそろうと計算します。';
   } catch {
     $('#specialAmount09').textContent = $('#leaveAmount09').textContent = '要確認';
@@ -131,12 +137,12 @@ async function editExtras09(event) {
       extras.leave.touched = true;
       if (field === 'enabled') extras.leave.confirmed = false;
     }
-    if (['housing','utilities'].includes(key) && field !== 'confirmed') extras[key].confirmed = false;
+    if (['housing','utilities'].includes(key) && field !== 'confirmed' && extrasFor09(period)[key][field] !== value) extras[key].confirmed = false;
     period.extras09 = extras;
     const profiles = payStore().extraProfiles09 ??= {};
     const profile = profiles[employee().id] ??= {};
     if (key === 'special' && ['a','b'].includes(field)) profile[field] = value;
-    if (['housing','utilities'].includes(key)) profile[key] = {amount:extras[key].amount,enabled:extras[key].enabled,reason:extras[key].reason};
+    if (['housing','utilities'].includes(key)) profile[key] = {amount:extras[key].amount,enabled:extras[key].enabled,reason:extras[key].reason,confirmed:extras[key].confirmed && !!extras[key].reason.trim()};
     const switchedSpecial = key === 'special' && !previous?.special.formula && extras.special.formula;
     const switchedLeave = key === 'leave' && !previous?.leave.touched;
     renderPay07(!switchedSpecial && !switchedLeave);
@@ -343,10 +349,11 @@ $('#periodPrint').onclick = function () {
       ? '手動入力（明細の金額を使用）' : note || '要確認';
     $('#periodSlipBody').innerHTML = `<article class="slip09">
       <h1>${p.month} 給与明細</h1>
-      <p><strong>${esc(employee().name)}</strong>　${saved ? '確定済み' : '未確定・確認用'}</p>
+      <p><strong>${esc(employee().name)}</strong>　${saved ? '確定済み' : '確認用プレビュー・未確定'}</p>
       <p>対象期間 ${p.start}〜${p.end}　支払日 ${esc(result.settings.payDate)}</p>
       <p>${day ? `通常出勤 ${day.regularDays}日　土曜出勤 ${day.saturdayDays}日` : `実働 ${hm(result.summary.minutes)}　給与計算用 ${hm(result.summary.payroll)}`}</p>
       <div class="slipTables09">${table('支給',result.earnings,result.gross)}${table('控除',result.deductions,result.deductionTotal)}</div>
+      <p>確認済み控除小計　<strong>${yen(result.knownDeduction ?? result.deductionTotal ?? 0)}</strong></p>
       <p class="slipNet09">差引支給額　<strong>${yen(result.net)}</strong></p>
       <p>所得税　${esc(deductionNote('income',result.tax.note))}<br>雇用保険　${esc(deductionNote('employment',result.ei.note))}</p>
       ${result.errors.length ? `<p>要確認　${esc(result.errors.join(' / '))}</p>` : ''}

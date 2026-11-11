@@ -8,11 +8,12 @@ const money = (value, label) => root.PayrollCore.money(value, label);
 function defaults(period, profile = {}, mode, fresh = false) {
   const deduction = key => {
     const old = find(period.deductions, key);
+    const saved = profile[key];
     return {
       amount: old?.amount ?? profile[key]?.amount ?? 10000,
       enabled: old ? old.amount > 0 : !!profile[key]?.enabled,
       reason: old?.reason ?? profile[key]?.reason ?? '',
-      confirmed: old?.legalConfirmed === true
+      confirmed: old ? old.legalConfirmed === true : saved?.confirmed === true && typeof saved.reason === 'string' && !!saved.reason.trim()
     };
   };
   return {
@@ -26,6 +27,15 @@ function defaults(period, profile = {}, mode, fresh = false) {
 function calculate(period, extras, plan, rows, table, legacySpecial) {
   const effective = structuredClone(period);
   const issues = [];
+  const otherSocial = period.settings.otherSocial10;
+  if (otherSocial === null) issues.push('社会保険料等の金額を入力してください');
+  if (otherSocial > 0) {
+    const alreadyListed = effective.deductions.some(item => item.socialInsurance && item.amount > 0 && item.overrideFor !== 'employment');
+    if (alreadyListed) issues.push('社会保険料等が既存の控除と重複しています。内訳を確認してください');
+    else if (!period.settings.socialConfirmed) issues.push('社会保険料等の金額を確認してください');
+    else effective.deductions.push({id:'social10',name:'社会保険料等（雇用保険以外）',kind:'statutory',calc:'manual',
+      amount:money(otherSocial),socialInsurance:true});
+  }
   const special = extras.special;
   const oldSpecial = find(effective.earnings, 'special');
   let specialAmount = !special.formula ? (legacySpecial ?? oldSpecial?.amount ?? 0) : 0;
@@ -94,11 +104,16 @@ function calculate(period, extras, plan, rows, table, legacySpecial) {
     result.earnings.find(item => item.id === specialId).amount = specialAmount;
     result.earnings.find(item => item.id === leaveId).amount = leaveAmount;
   }
+  if (issues.some(issue => issue.startsWith('社会保険料等'))) {
+    for (const item of result.deductions) if (item.calc === 'income') item.amount = null;
+    result.tax = {...result.tax,amount:null,note:'社会保険料等の金額が未確認'};
+  }
   if (issues.length) {
     result.errors.push(...issues);
     result.net = result.deductionTotal = null;
     result.ready = false;
   }
+  result.knownDeduction = result.deductions.reduce((sum, item) => sum + (item.amount ?? 0), 0);
   result.extras09 = structuredClone(extras);
   return result;
 }
