@@ -133,3 +133,20 @@ test('old draft defaults and employee tax-year overrides follow the payment year
   assert.equal(next.taxYear,2027);
   assert.equal(settings.taxColumn,'unknown');
 });
+
+test('129000 November hourly pay applies resident monthly tax and preserves residency next month', () => {
+  const saved = {residency:'resident',taxColumn:'kou',dependents:0};
+  const period = Payroll.create('2026-11');
+  const plan = {conditions:[],summary:{wage:129000,pending:0},mode:'hourly',rate:1200,base:129000,special:{issues:[],amount:0,count:0},specialSettings:{}};
+  const extras = Extras.defaults(period,{},'hourly',true);
+  const run = (pay,profile) => Extras.calculate({...pay,settings:Payroll.deductionSettings12(pay.settings,profile)},extras,plan,[],table,undefined,true);
+  const november = run(period,saved);
+  assert.equal(november.gross,129000);
+  assert.equal(november.tax.amount,1400);
+  assert.equal(november.ei.amount,1880);
+  assert.equal(november.deductionTotal,3280);
+  assert.equal(november.net,125720);
+  const december = Payroll.create('2026-12');
+  assert.equal(run(december,saved).tax.amount,1400);
+  assert.equal(run(december,{...saved,residency:'nonresident'}).tax.amount,null);
+});

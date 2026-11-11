@@ -109,10 +109,46 @@ refund12.innerHTML = '還付金（当月のみ・円） <input data-pay-setting=
 const subtotal12 = document.createElement('p');
 subtotal12.className = 'muted';
 $('#pay07Totals').after(subtotal12,refund12);
+const residencyForm16 = document.createElement('div');
+residencyForm16.className = 'form-grid';
+residencyForm16.innerHTML = `
+  <label>所得税の居住者区分
+    <select id="employeeResidency16">
+      <option value="resident">居住者（月額表対象）</option>
+      <option value="nonresident">非居住者・別途確認</option>
+      <option value="unknown">未確認</option>
+    </select>
+  </label>
+  <button type="button" class="secondary" id="saveResidency16">居住者区分を保存</button>
+  <p id="residencyStatus16" role="status"></p>`;
+$('#saveEmployee08').after(residencyForm16);
+const residencySelect16 = $('#employeeResidency16');
+residencySelect16.onchange = () => { $('#residencyStatus16').textContent = ''; };
+$('#saveResidency16').onclick = async () => {
+  const id = employee().id;
+  const residency = residencySelect16.value;
+  state.payrollV07 ??= {profiles:{},periods:{},taxTables:{}};
+  rememberDeductionProfile10({settings:{residency}},'residency');
+  try {
+    await persistPay();
+    if (employee().id !== id) return;
+    renderPay07();
+    $('#residencyStatus16').textContent = '従業員の居住者区分を保存しました。';
+  } catch (error) {
+    if (employee().id === id) $('#residencyStatus16').textContent = error.message;
+  }
+};
+let residencyEmployee16;
 const beforeRender11 = renderPay07;
 renderPay07 = function (keepRows = false) {
   beforeRender11(keepRows);
+  if (!state) return;
   const period = payPeriod();
+  const id = employee().id;
+  if (residencyEmployee16 !== id) $('#residencyStatus16').textContent = '';
+  residencyEmployee16 = id;
+  const stored = payStore().extraProfiles09?.[id]?.deductionSettings10;
+  residencySelect16.value = PayrollCore.deductionSettings12(period?.settings ?? {}, stored ?? {}).residency;
   if (!period) return;
   $('#excelPreset11').disabled = !!period.snapshot;
   try {
