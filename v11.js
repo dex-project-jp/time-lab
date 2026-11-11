@@ -43,8 +43,8 @@ payRows = function (side, period, result) {
         <label class="deductionLine11"><span>${standard ? esc(item.name) : '控除項目'}</span><input aria-label="${esc(item.name)}を控除する" type="checkbox" data-pay-field="enabled" ${disabled?'':'checked'}></label>
         ${standard ? `<label>計算方法<select data-pay-field="calc"><option value="${auto}" ${item.calc !== 'manual'?'selected':''}>自動計算</option><option value="manual" ${item.calc === 'manual'?'selected':''}>手入力</option></select></label>`
           : `<label>名称<input data-pay-field="name" maxlength="80" value="${esc(item.name)}"></label>`}
-        <label>金額（円）<input type="number" inputmode="numeric" min="0" max="1000000000" step="1" data-pay-field="amount"
-          value="${item.calc === 'manual' ? item.amount : result.deductions.find(row=>row.id===item.id)?.amount ?? 0}" ${item.calc !== 'manual'?'disabled':''}></label>
+        <label>金額（円）<input type="number" inputmode="numeric" min="0" max="1000000000" step="1" placeholder="未入力・未計算" data-pay-field="amount"
+          value="${item.calc === 'manual' ? item.amount : result.deductions.find(row=>row.id===item.id)?.amount ?? ''}" ${item.calc !== 'manual'?'disabled':''}></label>
         ${standard ? '' : `<button type="button" class="secondary" data-remove-pay="${esc(item.id)}">削除</button>`}
       </div>`;
     }).join('');
@@ -95,6 +95,11 @@ settingsLink11.onclick = () => {
 };
 $('#saveEmployee08').after(settingsLink11);
 
+const refund12 = document.createElement('label');
+refund12.innerHTML = '還付金（当月のみ・円） <input data-pay-setting="taxRefund" type="number" inputmode="numeric" min="0" max="1000000000" step="1" placeholder="0">';
+const subtotal12 = document.createElement('p');
+subtotal12.className = 'muted';
+$('#pay07Totals').after(subtotal12,refund12);
 const beforeRender11 = renderPay07;
 renderPay07 = function (keepRows = false) {
   beforeRender11(keepRows);
@@ -103,6 +108,8 @@ renderPay07 = function (keepRows = false) {
   $('#excelPreset11').disabled = !!period.snapshot;
   try {
     const result = livePay();
+    subtotal12.hidden = result.deductionTotal !== null;
+    subtotal12.textContent = '計算済みの控除小計 ' + yen(result.knownDeduction ?? 0);
     $('#pay07Reference').textContent = [
       result.tax.note, result.ei.note
     ].filter(Boolean).join('\n');

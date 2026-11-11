@@ -352,6 +352,7 @@ $('#periodPrint').onclick = function () {
       <p>${day ? `通常出勤 ${day.regularDays}日　土曜出勤 ${day.saturdayDays}日` : `実働 ${hm(result.summary.minutes)}　給与計算用 ${hm(result.summary.payroll)}`}</p>
       <div class="slipTables09">${table('支給',result.earnings,result.gross)}${table('控除',result.deductions,result.deductionTotal)}</div>
       ${result.deductionTotal === null ? `<p>確認済み控除小計　<strong>${yen(result.knownDeduction ?? result.deductionTotal ?? 0)}</strong></p>` : ''}
+      ${result.taxRefund > 0 ? `<p>還付金（当月調整）　<strong>${yen(result.taxRefund)}</strong></p>` : ''}
       <p class="slipNet09">差引支給額　<strong>${yen(result.net)}</strong></p>
 
       ${result.errors.length ? `<p>要確認　${esc(result.errors.join(' / '))}</p>` : ''}
