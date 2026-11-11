@@ -71,3 +71,12 @@ details>summary{list-style:none;cursor:pointer;min-height:48px;display:flex;alig
   outline: 2px solid #d5ac59;
   outline-offset: -2px;
 }
+
+/* Keep Safari input focus readable without restricting page zoom. */
+input, select, textarea {
+  font-size: max(16px, 1em) !important;
+}
+#tableEditor [data-edit-time] {
+  min-height: 44px;
+  font-variant-numeric: tabular-nums;
+}

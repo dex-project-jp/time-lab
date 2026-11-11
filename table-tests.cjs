@@ -14,3 +14,9 @@ test('bad edited duplicate rejected atomically',()=>{let s=state(),rows=read(tex
 test('partial actual format remains unconfirmed',()=>{let s=state(),rows=read(head+'|2026-10-16|06:00||||');rows[0].am=true;T.apply(s,e.id,'2026-11',rows);assert.equal(s.months[e.id+':2026-10'].rows[16].reviewed,false)});
 test('edited value retains original analysis text',()=>{let s=state(),rows=read(text);rows[0].times[1]='09:12';T.apply(s,e.id,'2026-11',rows);assert.equal(s.months[e.id+':2026-10'].rows[16].original[1].text,'09:11')});
 console.log(n+' table tests passed');
+
+test('manual editor normalizes numeric input and protects invalid times',()=>{
+ const d='2026-11-01';
+ assert.deepEqual(['０８３０','905','14:00',''].map((v,i)=>T.editorTime(v,d,i)),['08:30','09:05','14:00','']);
+ for(const value of ['2400','0860','1','ab','-'])assert.throws(()=>T.editorTime(value,d,2),/午後出勤/);
+});

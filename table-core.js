@@ -3,6 +3,14 @@ const labels=['日付','午前出勤','午前退勤','午後出勤','午後退�
 const norm=s=>String(s??'').normalize('NFKC').replace(/[\u200b-\u200d\uFEFF]/g,'').trim();
 const nameKey=s=>norm(s).replace(/\s/g,'');
 function time(value,date,col){let s=norm(value).replace(/\*\*/g,'');if(/^(?:|[-—–ー―]+|null|不明|未読|判読不能|空欄|休み|休|なし)$/i.test(s))return '';let m=s.match(/^(\d{1,2})\s*[:時]\s*(\d{2})分?$/);if(!m||+m[1]>23||+m[2]>59)throw Error(`${date} ${labels[col+1]}「${s}」を確認してください。時刻はHH:MM、不明は空欄にします`);return m[1].padStart(2,'0')+':'+m[2]}
+function editorTime(value,date,slot){
+  const entered=norm(value);
+  if (!entered) return '';
+  const digits=entered.match(/^(\d{1,2})(\d{2})$/);
+  const formatted=digits ? digits[1]+':'+digits[2] : entered;
+  if (!/^\d{1,2}:\d{2}$/.test(formatted)) throw Error(`${labels[slot+1]}は 0830 または 08:30 の形で入力してください`);
+  return time(formatted,date,slot);
+}
 function parse(text,salaryMonth,employee){if(typeof text!=='string'||text.length>1000000)throw Error('解析結果は1MB以下にしてください');const p=root.PeriodCore.period(salaryMonth),s=text.normalize('NFKC').replace(/[\u200b-\u200d\uFEFF]/g,'').replace(/```[^\n]*\n?/g,'').replace(/\r/g,'');if(/^\s*\{/.test(s)){let src=root.ImportCore.document(s).source;root.ExchangeCore.employee({source:src},employee);return {name:src.employeeName||'',records:root.PeriodCore.parse(s,salaryMonth,employee.id)}}
 let lines=s.split('\n').map(x=>x.replace(/^ +| +$/g,'').replace(/\*\*/g,'')),names=lines.map(x=>x.match(/^(?:従業員名|従業員|氏名)\s*[:：]\s*(.+)$/)?.[1]).filter(Boolean);for(let n of names)if(!/^(?:不明|未読|空欄|null)$/.test(n)&&nameKey(n)!==nameKey(employee.name))throw Error(`従業員名が違います。表は「${n}」、選択中は「${employee.name}」です。従業員を選び直してください`);
 let rows=[],header=false,stack=[];const clean=x=>norm(x).replace(/\s/g,'');
@@ -19,5 +27,5 @@ return {name:names[0]||'',records:root.PeriodCore.parse(JSON.stringify({payrollM
 function validate(records,month,id){if(!records.length)throw Error('保存する日付がありません');let parsed=root.PeriodCore.parse(JSON.stringify({payrollMonth:month,employeeId:id,rows:records.map(r=>({date:r.date,times:r.times,am:r.am,pm:r.pm}))}),month,id);parsed.forEach((r,i)=>{let issues=root.TimeCore.inspect(r).errors;if(records[i].confirmed&&issues.length)throw Error(`${r.date}: ${issues.join(' / ')}。修正するか確認チェックを外してください`)});return parsed}
 function apply(state,id,month,records){let valid=validate(records,month,id),result=root.PeriodCore.apply(state,id,month,valid);for(let date of result.dates){let i=valid.findIndex(r=>r.date===date),r=state.months[id+':'+date.slice(0,7)].rows[+date.slice(8)];r.reviewed=!!records[i].confirmed;if(Array.isArray(records[i].raw))r.original=structuredClone(records[i].raw);r.importMethod='manual-chatgpt-table';r.note=r.reviewed?'写真と解析表を利用者が確認':'解析表から保存・写真との確認が必要'}result.confirmedExisting=0;for(let i=0;i<valid.length;i++){let v=valid[i],r=state.months[id+':'+v.date.slice(0,7)]?.rows[+v.date.slice(8)];if(r&&!r.reviewed&&records[i].confirmed&&JSON.stringify(r.times)===JSON.stringify(v.times)&&r.am===(v.am??!!(v.times[0]&&v.times[1]))&&r.pm===(v.pm??!!(v.times[2]&&v.times[3]))){r.reviewed=true;result.confirmedExisting++}}return result}
 function prompt(month){let p=root.PeriodCore.period(month);return `添付した同じ従業員のMAX S/ER-Sタイムカードを1〜2枚解析してください。写真がなければ写真未添付とだけ回答。別人を混ぜないでください。給与対象月${month}、15日締めの${p.start}〜${p.end}。カードに印刷された前半/後半より各行の実際の年月日を優先し、右端の時間数欄は打刻から除外。明確な手書き修正は修正後を優先し、不明な数字や日付は推測しない。回答を次の3つに分けてください。\n1. 従業員名・対象期間・読み取り概要（従業員名：氏名。不明なら不明）\n2. TIME LAB取り込み用コピー専用データ：言語指定なしのコードブロックを1つ作り、その中には日付と4時刻だけを記載。1日1行、YYYY-MM-DD HH:MM HH:MM HH:MM HH:MM。順番は午前出勤・午前退勤・午後出勤・午後退勤。不明/空欄の時刻は - 。見出し・氏名・説明・合計・確認事項はブロック内に入れない。日付を読めた写真内の行だけを日付順に、重複なしで記載。日付を読めない行は推測しない。JSONは不要。\n3. 不明時刻・手書き修正・確認事項はコードブロックの外に記載してください。コピー操作はChatGPTのコードブロックを利用するもので、TIME LABへの自動返送ではありません。`}
-root.TableCore={parse,validate,apply,prompt,time};if(typeof module!=='undefined')module.exports=root.TableCore;
+root.TableCore={parse,validate,apply,prompt,time,editorTime};if(typeof module!=='undefined')module.exports=root.TableCore;
 })(typeof window!=='undefined'?window:globalThis);
