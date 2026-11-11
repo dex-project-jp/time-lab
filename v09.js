@@ -16,7 +16,9 @@ livePay = function () {
   if (!period || period.snapshot) return priorLivePay09();
   const plan = employeePlan();
   const rows = PeriodCore.rows(state, employee().id, salaryMonth());
-  return PayrollExtras.calculate(period, extrasFor09(period), plan, rows, taxFor(period.settings.taxYear),
+  const profile = payStore().extraProfiles09?.[employee().id]?.deductionSettings10;
+  const draft = {...period,settings:PayrollCore.deductionSettings12(period.settings,profile)};
+  return PayrollExtras.calculate(draft, extrasFor09(period), plan, rows, taxFor(period.settings.taxYear),
     employeeHistory().length ? plan.specialSalary : undefined, true);
 };
 
@@ -342,7 +344,7 @@ $('#periodPrint').onclick = function () {
     const p = PeriodCore.period(salaryMonth());
     const saved = !!payPeriod().snapshot;
     const table = (title, items, total) => `<table><thead><tr><th>${title}</th><th>金額</th></tr></thead><tbody>
-      ${items.map(item => `<tr><td>${esc(earningName(item))}</td><td>${yen(item.amount)}</td></tr>`).join('')}
+      ${items.map(item => `<tr><td>${esc(earningName(item))}${item.method === 'custom' ? '（カスタム）' : ''}</td><td>${yen(item.amount)}</td></tr>`).join('')}
       <tr><th>${title}総額</th><th>${yen(total)}</th></tr></tbody></table>`;
     const day = result.dayPay;
     $('#periodSlipBody').innerHTML = `<article class="slip09">

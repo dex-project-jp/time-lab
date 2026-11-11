@@ -35,8 +35,8 @@ test('specified November payroll deducts housing and utilities without confirmat
   const result = run();
   assert.deepEqual(result.earnings.slice(0,3).map(item=>item.amount),[182400,36000,40000]);
   assert.equal(result.gross,258400);
-  assert.equal(result.deductionTotal,20000);
-  assert.equal(result.net,238400);
+  assert.equal(result.deductionTotal,23750);
+  assert.equal(result.net,234650);
   assert.equal(result.ready,true);
   period.deductions[0] = {...period.deductions[0],calc:'manual',overrideFor:'income',amount:5000,enabled:true};
   period.deductions[1] = {...period.deductions[1],calc:'manual',overrideFor:'employment',amount:2000};
@@ -51,6 +51,8 @@ test('specified November payroll deducts housing and utilities without confirmat
 
 test('custom percentage uses gross, rounds up to 10 yen and respects OFF', () => {
   const {period,run} = example();
+  assert.equal(run().ei.amount,3750);
+  assert.equal(run().taxBase,258400);
   Object.assign(period.settings,{eiMethod11:'custom',eiCustomRate11:1.45,eiCustomRounding11:''});
   assert.equal(run().ei.amount,3750);
   assert.equal(run().deductionTotal,23750);
@@ -64,9 +66,9 @@ test('blank values, leave and additional deductions calculate without legal meta
   extra.leave = {enabled:true,days:0.5};
   period.deductions.push({id:'add',name:'その他',kind:'voluntary',calc:'manual',amount:1000});
   assert.equal(run().gross,233200);
-  assert.equal(run().deductionTotal,21000);
+  assert.equal(run().deductionTotal,24390);
   period.deductions[2].enabled = false;
-  assert.equal(run().deductionTotal,20000);
+  assert.equal(run().deductionTotal,23390);
 });
 
 test('2026 tax requires a column and uses zero dependents by default', () => {
@@ -75,7 +77,7 @@ test('2026 tax requires a column and uses zero dependents by default', () => {
   assert.equal(period.settings.dependents,0);
   assert.equal(run().tax.amount,null);
   assert.equal(run().net,null);
-  assert.equal(run().knownDeduction,20000);
+  assert.equal(run().knownDeduction,23750);
   assert.equal(run().ready,false);
   Object.assign(period.settings,{taxColumn:'kou',residency:'resident'});
   const bracket = table.rows.find(row=>row.lower<=258400&&row.upper>258400);
@@ -98,4 +100,17 @@ test('monthly refund changes only net and does not carry into next month', () =>
   assert.equal(next.settings.taxRefund,undefined);
   Payroll.freeze(period,adjusted,'2026-11-20T00:00:00Z');
   Payroll.validateStore({profiles:{},periods:{'x:2026-11':period},taxTables:{}},[{id:'x'}]);
+});
+
+test('employee settings are used for existing drafts without changing persisted source data', () => {
+  const {period} = example();
+  const original = structuredClone(period.settings);
+  const saved = {taxColumn:'kou',dependents:2,residency:'resident',eiMethod11:'custom',
+    eiCustomRate11:1.2,eiCustomRounding11:'floor'};
+  const settings = Payroll.deductionSettings12(period.settings,saved);
+  assert.equal(settings.taxColumn,'kou');
+  assert.equal(settings.dependents,2);
+  assert.equal(settings.eiCustomRate11,1.2);
+  assert.equal(settings.eiCustomRounding11,'floor');
+  assert.deepEqual(period.settings,original);
 });

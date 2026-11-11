@@ -39,13 +39,17 @@ payRows = function (side, period, result) {
       const standard = ['tax','ei'].includes(item.id) || item.calc !== 'manual' || !!item.overrideFor;
       const auto = item.overrideFor ?? (item.calc === 'manual' ? (item.id === 'tax' ? 'income' : 'employment') : item.calc);
       const disabled = item.enabled === false;
+      const computed = result.deductions.find(row=>row.id===item.id);
+      const hint = standard && !disabled && item.calc !== 'manual' &&
+        (computed?.amount == null || computed?.method === 'custom') ? computed?.note : '';
       return `<div class="pay-item deduction11" data-pay-side="deductions" data-pay-id="${esc(item.id)}">
         <label class="deductionLine11"><span>${standard ? esc(item.name) : '控除項目'}</span><input aria-label="${esc(item.name)}を控除する" type="checkbox" data-pay-field="enabled" ${disabled?'':'checked'}></label>
         ${standard ? `<label>計算方法<select data-pay-field="calc"><option value="${auto}" ${item.calc !== 'manual'?'selected':''}>自動計算</option><option value="manual" ${item.calc === 'manual'?'selected':''}>手入力</option></select></label>`
           : `<label>名称<input data-pay-field="name" maxlength="80" value="${esc(item.name)}"></label>`}
         <label>金額（円）<input type="number" inputmode="numeric" min="0" max="1000000000" step="1" placeholder="未入力・未計算" data-pay-field="amount"
           value="${item.calc === 'manual' ? item.amount : result.deductions.find(row=>row.id===item.id)?.amount ?? ''}" ${item.calc !== 'manual'?'disabled':''}></label>
-        ${standard ? '' : `<button type="button" class="secondary" data-remove-pay="${esc(item.id)}">削除</button>`}
+        ${standard ? `<p class="muted" data-deduction-note12>${esc(hint || '')}</p>` : ''}
+        ${standard ? `<button type="button" class="secondary" data-open-deduction12>計算設定を開く</button>` : `<button type="button" class="secondary" data-remove-pay="${esc(item.id)}">削除</button>`}
       </div>`;
     }).join('');
 };
@@ -63,23 +67,28 @@ const modes11 = document.createElement('div');
 modes11.className = 'form-grid';
 modes11.innerHTML = `
   <label>雇用保険の計算方式<select data-pay-setting="eiMethod11">
-    <option value="">従業員負担率の設定</option><option value="custom">独自設定（支給総額を使用）</option>
+    <option value="custom">カスタム（Excel方式・支給総額を使用）</option><option value="">法定の従業員負担率</option>
   </select></label>
-  <label>独自料率（%）<input data-pay-setting="eiCustomRate11" type="number" inputmode="decimal" min="0" max="100" step="0.001" placeholder="1.45"></label>
-  <label>独自設定の端数処理<select data-pay-setting="eiCustomRounding11">
-    <option value="">10円単位で切り上げ</option><option value="floor">1円未満切り捨て</option><option value="round">1円未満四捨五入</option><option value="ceil">1円未満切り上げ</option>
+  <label>カスタム料率（%）<input data-pay-setting="eiCustomRate11" type="number" inputmode="decimal" min="0" max="100" step="0.001" placeholder="1.45"></label>
+  <label>カスタム計算の端数処理<select data-pay-setting="eiCustomRounding11">
+    <option value="ceil10">10円単位で切り上げ</option><option value="floor">1円未満切り捨て</option><option value="round">1円未満四捨五入</option><option value="ceil">1円未満切り上げ</option>
   </select></label>
   <button type="button" class="secondary" id="excelPreset11">Excelと同じ設定（1.45%・10円切り上げ）</button>`;
 payrollSettings11.querySelector('summary').after(modes11);
 $('#excelPreset11').onclick = async () => {
   const period = payPeriod();
   if (!period || period.snapshot) return;
-  const preset = {eiMethod11:'custom',eiCustomRate11:1.45,eiCustomRounding11:''};
+  const preset = {eiMethod11:'custom',eiCustomRate11:1.45,eiCustomRounding11:'ceil10'};
   Object.assign(period.settings,preset);
   for (const key of Object.keys(preset)) rememberDeductionProfile10(period,key);
   renderPay07();
   try { await persistPay(); } catch (error) { payStatus(error.message); }
 };
+$('#pay07Deductions').addEventListener('click', event => {
+  if (!event.target.closest('[data-open-deduction12]')) return;
+  payrollSettings11.open = true;
+  payrollSettings11.scrollIntoView({block:'start'});
+});
 const settingsLink11 = document.createElement('button');
 settingsLink11.type = 'button';
 settingsLink11.className = 'secondary';
@@ -108,6 +117,13 @@ renderPay07 = function (keepRows = false) {
   $('#excelPreset11').disabled = !!period.snapshot;
   try {
     const result = livePay();
+    for (const note of document.querySelectorAll('[data-deduction-note12]')) {
+      const id = note.closest('[data-pay-id]').dataset.payId;
+      const row = result.deductions.find(item => item.id === id);
+      note.textContent = row?.enabled !== false && row?.calc !== 'manual' &&
+        (row?.amount == null || row?.method === 'custom') ? row?.note ?? '' : '';
+      note.hidden = !note.textContent;
+    }
     subtotal12.hidden = result.deductionTotal !== null;
     subtotal12.textContent = '計算済みの控除小計 ' + yen(result.knownDeduction ?? 0);
     $('#pay07Reference').textContent = [
