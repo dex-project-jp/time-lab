@@ -81,18 +81,37 @@ input, select, textarea {
   font-variant-numeric: tabular-nums;
 }
 
-#payrollExportPhotos {white-space: pre-line;}
-#payrollExportFiles {padding: 0; list-style: none;}
+/* Send dialogs keep the primary action below the scrolling attachments. */
+.payroll-send-actions {display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem;}
+.payroll-send-actions button, #payrollExportSend {min-height: 48px;}
+#payrollExportNotice:empty, #payrollExportStatus:empty, #payrollExportPhotos:empty, #payrollExportState:empty {display: none;}
+#payrollExport {
+  width: min(32rem, calc(100% - 24px));
+  max-height: 90vh;
+  max-height: 90dvh;
+  padding: 0;
+  overflow: hidden;
+}
+#payrollExport[open] {display: flex; flex-direction: column;}
+#payrollExport .dialog-top, .payroll-export-footer {flex: none; padding: .75rem 1rem;}
+#payrollExport h2 {margin: .2rem 0; font-size: 1.2rem;}
+#closePayrollExport, #payrollExportOther summary {min-height: 44px;}
+.payroll-export-body {min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 1rem .25rem;}
+#payrollExportContext {margin: .25rem 0; overflow-wrap: anywhere; font-weight: 700;}
+#payrollExportState {margin: .25rem 0; color: var(--gold);}
+#payrollExportFiles {padding: 0; margin: .5rem 0; list-style: none;}
 #payrollExportFiles li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
-  gap: .5rem;
-  padding: .6rem 0;
+  gap: .65rem;
+  min-height: 40px;
+  padding: .25rem 0;
   border-bottom: 1px solid #494335;
 }
-#payrollExportFiles span {overflow-wrap: anywhere;}
-#payrollExportFiles img {grid-column: 1 / -1; width: min(100%, 17rem); max-height: 20rem; object-fit: contain; object-position: left;}
-#payrollExport .actions {flex-wrap: wrap;}
-#payrollExportNotice:empty {display: none;}
-#payrollExport {width: min(40rem, calc(100% - 24px)); max-height: 90dvh; overflow: auto;}
+#payrollExportFiles span {min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+#payrollExportFiles img {width: 40px; height: 40px; flex: none; object-fit: contain; border-radius: 4px;}
+#payrollExportOther summary {display: flex; align-items: center;}
+#payrollExportOther .actions {flex-wrap: wrap;}
+.payroll-export-footer {border-top: 1px solid #494335;}
+#payrollExportStatus {margin: 0 0 .45rem; font-size: .9rem;}
+#payrollExportSend {width: 100%;}
