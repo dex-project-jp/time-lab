@@ -75,6 +75,10 @@ test('2026 tax requires a column and uses zero dependents by default', () => {
   const {period,run} = example();
   period.deductions[0].enabled = true;
   assert.equal(period.settings.dependents,0);
+  assert.equal(period.settings.taxColumn,'kou');
+  assert.equal(period.settings.residency,'resident');
+  assert.equal(run().tax.amount,6430);
+  period.settings.taxColumn = 'unknown';
   assert.equal(run().tax.amount,null);
   assert.equal(run().net,null);
   assert.equal(run().knownDeduction,23750);
@@ -113,4 +117,19 @@ test('employee settings are used for existing drafts without changing persisted 
   assert.equal(settings.eiCustomRate11,1.2);
   assert.equal(settings.eiCustomRounding11,'floor');
   assert.deepEqual(period.settings,original);
+});
+
+test('old draft defaults and employee tax-year overrides follow the payment year', () => {
+  const settings = {payDate:'2026-11-20',taxYear:2026,taxColumn:'unknown',residency:'unknown'};
+  const legacy = Payroll.deductionSettings12(settings,{});
+  assert.equal(legacy.taxColumn,'kou');
+  assert.equal(legacy.residency,'resident');
+  const profile = {taxColumn:'otsu',dependents:2,taxYears:{2026:2025}};
+  const current = Payroll.deductionSettings12(settings,profile);
+  assert.equal(current.taxYear,2025);
+  assert.equal(current.taxColumn,'otsu');
+  assert.equal(current.dependents,2);
+  const next = Payroll.deductionSettings12({...settings,payDate:'2027-01-20',taxYear:2027},profile);
+  assert.equal(next.taxYear,2027);
+  assert.equal(settings.taxColumn,'unknown');
 });

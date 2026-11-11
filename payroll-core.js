@@ -2,18 +2,26 @@
 const clone=v=>JSON.parse(JSON.stringify(v));
 function money(v,label='金額'){if(v===''||v===null||typeof v==='boolean'||!Number.isSafeInteger(Number(v))||Number(v)<0||Number(v)>1000000000)throw Error(label+'は0〜10億円の整数で入力してください');return Number(v)}
 const MHLW='https://www.mhlw.go.jp/content/001692566.pdf',NTA='https://www.nta.go.jp/publication/pamph/gensen/zeigakuhyo2026/01.htm';
-function defaults(month){return {payDate:month+'-20',taxYear:Number(month.slice(0,4)),taxColumn:'unknown',dependents:0,secondaryDependents:0,residency:'unknown',taxConditions:false,socialConfirmed:false,insured:'unknown',eiYear:2026,business:'general',eiRate:0.005,eiRounding:'withhold',eiStart:'2026-04-01',eiEnd:'2027-03-31',eiSource:MHLW,eiConfirmed:false}}
+function defaults(month){return {payDate:month+'-20',taxYear:Number(month.slice(0,4)),taxColumn:'kou',dependents:0,secondaryDependents:0,residency:'resident',taxConditions:false,socialConfirmed:false,insured:'unknown',eiYear:2026,business:'general',eiRate:0.005,eiRounding:'withhold',eiStart:'2026-04-01',eiEnd:'2027-03-31',eiSource:MHLW,eiConfirmed:false}}
 function items(){return {earnings:[{id:'base',name:'基本給',kind:'salary',source:'attendance',amount:0,recurring:true,eiBase:true},{id:'special',name:'特別給与',kind:'salary',source:'manual',amount:0,recurring:true,eiBase:true},{id:'saturday',name:'土曜出勤手当',kind:'salary',source:'specialAttendance',amount:0,recurring:false,eiBase:true}],deductions:[{id:'tax',name:'所得税',kind:'statutory',calc:'income',amount:0,recurring:true,reason:''},{id:'ei',name:'雇用保険料',kind:'statutory',calc:'employment',amount:0,recurring:true,reason:''}]}}
 function create(month,profile,legacy,employeeName='',specialProfile){let x=profile?clone(profile):{...items(),settings:defaults(month)};x.settings={...defaults(month),...x.settings,payDate:month+'-20',taxYear:+month.slice(0,4)};delete x.settings.taxRefund;x.earnings=x.earnings.map(i=>({...i,amount:i.recurring?i.amount:0}));x.deductions=x.deductions.map(i=>({...i,amount:i.recurring&&i.calc==='manual'?i.amount:0,legalConfirmed:false}));if(!profile&&legacy){if(legacy.allowance)x.earnings.push({id:'legacy-pay',name:'旧手当合計',kind:'salary',source:'manual',amount:money(legacy.allowance),recurring:false,eiBase:true});if(legacy.deductions)x.deductions.push({id:'legacy-deduct',name:'旧控除合計（内訳要確認）',kind:'voluntary',calc:'manual',amount:money(legacy.deductions),recurring:false,legalConfirmed:false,reason:''})}return {...x,special:{...(specialProfile||x.special||specialDefaults(employeeName)),countMode:'auto',count:null,countReason:'',countConfirmed:false,legalConfirmed:false},month,snapshot:null,revisions:[]}}
 function roundEI(raw,method){if(method==='withhold')return Math.ceil(raw-0.5-1e-8);if(method==='floor')return Math.floor(raw+1e-8);if(method==='round')return Math.round(raw+1e-8);if(method==='ceil')return Math.ceil(raw-1e-8);throw Error('雇用保険の端数処理を確認してください')}
 function temporary(gross){return Math.ceil(money(gross)*145/10000/10-1e-8)*10}
 function employment(base,s){if(s.insured==='no')return {amount:0,note:'被保険者でない設定'};if(s.insured!=='yes')return {amount:null,note:'雇用保険の加入状況が未確認'};if(!s.eiConfirmed)return {amount:null,note:'雇用保険の年度・事業区分・労働者負担率の確認が必要'};if(!/^\d{4}-\d{2}-\d{2}$/.test(s.payDate||'')||s.payDate<s.eiStart||s.payDate>s.eiEnd)return {amount:null,note:'支払日が雇用保険料率の適用期間外'};if(!Number.isInteger(+s.eiYear)||!['general','agriculture','construction','custom'].includes(s.business)||!Number.isFinite(+s.eiRate)||+s.eiRate<0||+s.eiRate>.1)return {amount:null,note:'雇用保険設定が不正'};if(Math.abs(+s.eiRate-.0145)<1e-10)return {amount:null,note:'暫定1.45%を正式控除には使えません'};if(+s.eiYear===2026&&s.business!=='custom'&&Math.abs(+s.eiRate-(s.business==='general'?.005:.006))>1e-10)return {amount:null,note:'2026年度の事業区分と労働者負担率が不一致'};if(!/^https:\/\//.test(s.eiSource||''))return {amount:null,note:'料率の出典URLが未登録'};return {amount:Math.max(0,roundEI(base*Number(s.eiRate),s.eiRounding)),note:`${s.eiYear}年度 / ${s.business} / 労働者負担${(+s.eiRate*100).toFixed(3)}% / ${s.eiRounding}`,source:s.eiSource}}
-function deductionSettings12(settings, profile = {}) {
+function deductionSettings12(settings, profile) {
   const result = {...settings};
+  const saved = profile ?? {};
+  // Older drafts stored 'unknown' as their initial value. Explicit employee choices win.
+  if (profile) {
+    if (!result.taxColumn || result.taxColumn === 'unknown') result.taxColumn = 'kou';
+    if (!result.residency || result.residency === 'unknown') result.residency = 'resident';
+    const year = result.payDate?.slice(0,4);
+    if (Object.hasOwn(saved.taxYears ?? {},year)) result.taxYear = saved.taxYears[year];
+  }
   for (const key of ['taxColumn','dependents','secondaryDependents','residency',
     'insured','eiYear','business','eiRate','eiRounding','eiStart','eiEnd','eiSource','eiConfirmed',
     'eiMethod11','eiCustomRate11','eiCustomRounding11']) {
-    if (Object.hasOwn(profile,key)) result[key] = profile[key];
+    if (Object.hasOwn(saved,key)) result[key] = saved[key];
   }
   result.dependents ??= 0;
   result.eiMethod11 ??= (result.eiConfirmed || result.insured === 'no' ? '' : 'custom');

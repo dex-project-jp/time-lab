@@ -17,7 +17,7 @@ livePay = function () {
   const plan = employeePlan();
   const rows = PeriodCore.rows(state, employee().id, salaryMonth());
   const profile = payStore().extraProfiles09?.[employee().id]?.deductionSettings10;
-  const draft = {...period,settings:PayrollCore.deductionSettings12(period.settings,profile)};
+  const draft = {...period,settings:PayrollCore.deductionSettings12(period.settings,profile ?? {})};
   return PayrollExtras.calculate(draft, extrasFor09(period), plan, rows, taxFor(period.settings.taxYear),
     employeeHistory().length ? plan.specialSalary : undefined, true);
 };

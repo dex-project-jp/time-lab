@@ -11,6 +11,10 @@ function rememberDeductionProfile10(period, key) {
   const profiles = payStore().extraProfiles09 ??= {};
   const profile = profiles[employee().id] ??= {};
   const settings = profile.deductionSettings10 ??= {};
+  if (key === 'taxYear') {
+    settings.taxYears ??= {};
+    settings.taxYears[period.settings.payDate.slice(0,4)] = period.settings.taxYear;
+  }
   const fields = [key,'eiConfirmed','taxConditions','socialConfirmed'];
   if (key === 'business') fields.push('eiRate');
   if (key === 'eiConfirmed' && period.settings.eiConfirmed) fields.push(...deductionFields10.slice(0,8));
@@ -25,7 +29,7 @@ function applyDeductionProfile10(period) {
   const saved = payStore().extraProfiles09?.[employee().id]?.deductionSettings10;
   if (!saved) return;
   for (const field of deductionFields10) {
-    if (Object.prototype.hasOwnProperty.call(saved,field)) period.settings[field] = saved[field];
+    if (field !== 'taxYear' && Object.prototype.hasOwnProperty.call(saved,field)) period.settings[field] = saved[field];
   }
 }
 
