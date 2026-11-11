@@ -344,7 +344,7 @@ $('#periodPrint').onclick = function () {
     const p = PeriodCore.period(salaryMonth());
     const saved = !!payPeriod().snapshot;
     const table = (title, items, total) => `<table><thead><tr><th>${title}</th><th>金額</th></tr></thead><tbody>
-      ${items.map(item => `<tr><td>${esc(earningName(item))}</td><td>${yen(item.amount)}</td></tr>`).join('')}
+      ${items.map(item => `<tr><td>${esc(earningName(item))}</td><td>${slipItemAmount(item.amount)}</td></tr>`).join('')}
       <tr><th>${title}総額</th><th>${yen(total)}</th></tr></tbody></table>`;
     const day = result.dayPay;
     $('#periodSlipBody').innerHTML = `<article class="slip09">
