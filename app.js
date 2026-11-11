@@ -31,7 +31,39 @@ async function readFile(file){let bitmap;const url=URL.createObjectURL(file);try
 async function fingerprint(data){const bytes=new TextEncoder().encode(data);if(crypto.subtle)return [...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(b=>b.toString(16).padStart(2,'0')).join('');let h=2166136261;for(let b of bytes)h=Math.imul(h^b,16777619);return String(h>>>0)}
 async function loadImage(data){return new Promise((res,rej)=>{let i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=data})}
 async function openStored(id){const i=monthData().images.find(x=>x.id===id);if(i)await openScan(i,false)}
-document.querySelectorAll('[data-half]').forEach(el=>el.onchange=async ev=>{let f=ev.target.files[0];if(!f)return;try{let data=await readFile(f),hash=await fingerprint(data);if(monthData().images.some(i=>i.hash===hash)){toast('この画像はすでに登録されています');return}let i={id:uid(),data,hash,name:f.name,half:el.dataset.half,applied:false};monthData().images.push(i);await save();renderImages();await openScan(i,false)}catch(e){toast(e.message)}finally{ev.target.value=''}});
+function readOriginalPhoto(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(Error('原本写真を読み込めませんでした'));
+    reader.readAsDataURL(file);
+  });
+}
+document.querySelectorAll('[data-half]').forEach(input => input.onchange = async event => {
+  const file = event.target.files[0];
+  if (!file) return;
+  const id = employee().id, month = state.month, half = input.dataset.half;
+  try {
+    const [data, originalData] = await Promise.all([readFile(file), readOriginalPhoto(file)]);
+    const hash = await fingerprint(data);
+    if (employee().id !== id || state.month !== month) throw Error('従業員または年月が変わりました。写真を選び直してください');
+    const images = monthData().images;
+    if (images.some(image => image.hash === hash)) {
+      toast('この画像はすでに登録されています');
+      return;
+    }
+    const image = {id:uid(), data, originalData, originalName:file.name, hash, name:file.name, half, applied:false};
+    images.push(image);
+    await save();
+    if (employee().id !== id || state.month !== month) return;
+    renderImages();
+    await openScan(image, false);
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    input.value = '';
+  }
+});
 $('#testFile').onchange=async ev=>{try{if(ev.target.files[0])await openScan({data:await readFile(ev.target.files[0]),half:'first'},true)}catch(e){toast(e.message)}finally{ev.target.value=''}};
 function detectTable(c){const ctx=c.getContext('2d'),{width:w,height:h}=c,px=ctx.getImageData(0,0,w,h).data;let xs=[],ys=[];for(let y=0;y<h;y+=2){let count=0;for(let x=0;x<w;x+=2){let p=(y*w+x)*4;if(px[p]+px[p+1]+px[p+2]<390)count++}if(count>w*.22)ys.push(y)}for(let x=0;x<w;x+=2){let count=0;for(let y=0;y<h;y+=2){let p=(y*w+x)*4;if(px[p]+px[p+1]+px[p+2]<390)count++}if(count>h*.22)xs.push(x)}if(xs.length<2||ys.length<2)return {left:5,top:20,right:95,bottom:95,detected:false};let box={left:100*xs[0]/w,right:100*xs.at(-1)/w,top:100*ys[0]/h,bottom:100*ys.at(-1)/h,detected:true};if(box.right-box.left<35||box.bottom-box.top<30)return {left:5,top:20,right:95,bottom:95,detected:false};return box}
 async function openScan(image,test){scan={image,test,employee:employee().id,month:state.month};activeImage=await loadImage(image.data);sourceCanvas=document.createElement('canvas');sourceCanvas.width=activeImage.width;sourceCanvas.height=activeImage.height;sourceCanvas.getContext('2d').drawImage(activeImage,0,0);let box=image.calibration?.box||detectTable(sourceCanvas);scan.box=box;scan.angle=image.calibration?.angle||0;scan.threshold=image.calibration?.threshold||165;[scan.split,scan.col2,scan.col3,scan.col4]=image.calibration?.columns||[12,34,56,78];candidates=[];$('#chappyJson').value='';$('#comparison').innerHTML='';$('#chappyStatus').textContent='';$('#apply').disabled=true;$('#apply').hidden=test;$('#ocrResult').textContent='';$('#progress').textContent=box.detected?'罫線から表範囲を仮検出しました。必ず枠を確認してください。':'表の自動検出が不確実です。範囲を調整してください。';$('#scanTitle').textContent=test?'OCR精度テスト':'カード画像の確認';$('#controls').innerHTML=[['left','左端',0,98,box.left],['right','右端',2,100,box.right],['top','上端',0,98,box.top],['bottom','下端',2,100,box.bottom],['angle','傾き（度）',-15,15,scan.angle],['threshold','白黒の境界',70,230,scan.threshold],['split','日付列の右端（%）',5,30,scan.split],['col2','午前出勤の右端（%）',15,50,scan.col2],['col3','午前退勤の右端（%）',30,70,scan.col3],['col4','午後出勤の右端（%）',50,95,scan.col4]].map(([id,l,min,max,v])=>`<label>${l}<input type="number" data-control="${id}" min="${min}" max="${max}" step="${id==='angle'?.5:1}" value="${Math.round(v*10)/10}"></label>`).join('');drawScan();$('#scanner').showModal()}

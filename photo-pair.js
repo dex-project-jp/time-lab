@@ -7,7 +7,39 @@ function showPairManual(message){$('#pairManual').open=true;$('#pairStatus').tex
 $('#sharePair').onclick=async()=>{try{if(pairContext!==pairKey()||!pairFiles.length)throw Error('対象の写真を選び直してください');const payload={files:pairFiles,text:TableCore.prompt(salaryMonth()),title:'TIME LAB タイムカード解析'};if(!navigator.share||!navigator.canShare?.({files:pairFiles})){showPairManual('この環境は写真共有に対応していません。下の依頼文をコピーし、保存した写真をChatGPTの＋から添付してください。');return}await navigator.share(payload);showPairManual('共有操作が終了しました。ChatGPTに写真が'+pairFiles.length+'枚添付されたか確認してください。写真や依頼文がなければ下の手順で手動添付します。アプリから受信成功は確認できません。')}catch(e){if(e.name!=='AbortError')showPairManual('共有できません: '+e.message+'。下の手動添付を使ってください。');else $('#pairStatus').textContent='共有をキャンセルしました'}};
 $('#copyPairPrompt').onclick=async()=>{const text=TableCore.prompt(salaryMonth());$('#pairPrompt').value=text;try{await navigator.clipboard.writeText(text);$('#pairStatus').textContent='依頼文をコピーしました。ChatGPTの＋から写真を添付し、写真のサムネイルを確認して依頼文を貼り付けます。'}catch{$('#pairStatus').textContent='下の依頼文を長押ししてコピーしてください'}};
 $('#pairManualImages').onclick=ev=>{const half=ev.target.dataset.savePair;if(!half)return;try{const slot=selectedPair().find(s=>s.half===half),file=ExchangeCore.file(slot.image.data,`TIME-LAB-${slot.month}-${half}.jpg`);download(file.name,file,file.type);$('#pairStatus').textContent='写真の保存を開始しました。保存先を確認し、ChatGPTの＋から写真/ファイルを添付してください。'}catch(e){$('#pairStatus').textContent=e.message}};
-document.querySelectorAll('[data-pair]').forEach(input=>input.onchange=async ev=>{const file=ev.target.files?.[0];if(!file)return;const id=employee().id,target=salaryMonth(),half=input.dataset.pair;try{$('#sharePair').disabled=true;const p=PeriodCore.period(target),month=half==='first'?p.month:p.previous,data=await readFile(file),hash=await fingerprint(data);if(employee().id!==id||salaryMonth()!==target)throw Error('従業員または給与対象月が変わりました。写真を選び直してください');const md=state.months[id+':'+month]||={rows:{},images:[],settings:{mode:employee().mode,rate:employee().rate}};let image=md.images.find(i=>i.hash===hash);if(!image){image={id:uid(),data,hash,name:file.name,half,applied:false};md.images.push(image)}((state.photoSets||={})[pairKey()]||={})[half]={month,id:image.id};await save();render();$('#pairStatus').textContent='写真を端末内に登録しました。氏名・年月と写真の対応を確認してください。'}catch(e){$('#pairStatus').textContent=e.message;renderPair()}finally{input.value=''}});
+document.querySelectorAll('[data-pair]').forEach(input => input.onchange = async event => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const id = employee().id, target = salaryMonth(), half = input.dataset.pair;
+  const p = PeriodCore.period(target), month = half === 'first' ? p.month : p.previous;
+  const context = id + ':' + target;
+  try {
+    $('#sharePair').disabled = true;
+    const [data, originalData] = await Promise.all([readFile(file), readOriginalPhoto(file)]);
+    const hash = await fingerprint(data);
+    if (pairKey() !== context) throw Error('従業員または給与対象月が変わりました。写真を選び直してください');
+    const md = state.months[id+':'+month] ||= {rows:{}, images:[], settings:{mode:employee().mode, rate:employee().rate}};
+    let image = md.images.find(i => i.hash === hash);
+    if (!image) {
+      image = {id:uid(), data, hash, name:file.name, half, applied:false};
+      md.images.push(image);
+    }
+    if (!image.originalData) {
+      image.originalData = originalData;
+      image.originalName = file.name;
+    }
+    ((state.photoSets ||= {})[context] ||= {})[half] = {month, id:image.id};
+    await save();
+    if (pairKey() !== context) return;
+    render();
+    $('#pairStatus').textContent = '写真を端末内に登録しました。氏名・年月と写真の対応を確認してください。';
+  } catch (error) {
+    $('#pairStatus').textContent = error.message;
+    renderPair();
+  } finally {
+    input.value = '';
+  }
+});
 document.querySelectorAll('[data-pair-existing]').forEach(sel=>sel.onchange=async()=>{const half=sel.dataset.pairExisting,p=PeriodCore.period(salaryMonth()),month=half==='first'?p.month:p.previous;((state.photoSets||={})[pairKey()]||={})[half]=sel.value?{month,id:sel.value}:null;await save();renderPair()});
 const tableRender=render;render=function(){tableRender();renderPair()};$('#salaryMonth').addEventListener('change',renderPair);if(state)renderPair();
 // All entry points now request the same Japanese table. Legacy JSON import stays available in Details.

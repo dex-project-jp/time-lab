@@ -80,3 +80,19 @@ input, select, textarea {
   min-height: 44px;
   font-variant-numeric: tabular-nums;
 }
+
+#payrollExportPhotos {white-space: pre-line;}
+#payrollExportFiles {padding: 0; list-style: none;}
+#payrollExportFiles li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .5rem;
+  padding: .6rem 0;
+  border-bottom: 1px solid #494335;
+}
+#payrollExportFiles span {overflow-wrap: anywhere;}
+#payrollExportFiles img {grid-column: 1 / -1; width: min(100%, 17rem); max-height: 20rem; object-fit: contain; object-position: left;}
+#payrollExport .actions {flex-wrap: wrap;}
+#payrollExportNotice:empty {display: none;}
+#payrollExport {width: min(40rem, calc(100% - 24px)); max-height: 90dvh; overflow: auto;}
