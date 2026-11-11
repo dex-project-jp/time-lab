@@ -52,3 +52,22 @@ details>summary{list-style:none;cursor:pointer;min-height:48px;display:flex;alig
 .deductionLine11 { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
 .deduction11 input:not([type=checkbox]), .deduction11 select, .deduction11 button { min-height: 44px; }
 .deduction11 input[type=checkbox] { width: 24px; height: 24px; }
+
+.compact-table .time-cell-edit {
+  width: 100%;
+  min-height: 44px;
+  min-width: 0;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  touch-action: manipulation;
+}
+.compact-table .time-cell-edit:focus-visible {
+  outline: 2px solid #d5ac59;
+  outline-offset: -2px;
+}
