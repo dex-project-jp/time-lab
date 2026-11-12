@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TIME LAB 同期接続テスト</title>
+<style>
+  body { color:#f5ecd8; background:#171612; font:1rem/1.65 system-ui,sans-serif; max-width:34rem; margin:2rem auto; padding:0 1rem; }
+  input,button { font:inherit; box-sizing:border-box; padding:.7rem; width:100%; }
+  button { margin-top:1rem; background:#d5b877; color:#171612; border:0; border-radius:.3rem; }
+</style>
+<h1>TIME LAB 同期接続テスト</h1>
+<p>給与を含まない空のテスト送信です。Google側には給与を保存できない形式を送ります。</p>
+<label for="endpoint">接続確認に使ったウェブアプリの /exec URL</label>
+<input id="endpoint" type="url" autocomplete="off" autocapitalize="none" spellcheck="false">
+<button id="send" type="button">空のテスト送信</button>
+<p id="status" role="status"></p>
+<script>
+  const endpoint = document.getElementById('endpoint');
+  const status = document.getElementById('status');
+  document.getElementById('send').onclick = () => {
+    const url = endpoint.value.trim();
+    if (!/^https:\/\/script\.google\.com\/(?:a\/macros\/[a-zA-Z0-9.-]+|macros)\/s\/[a-zA-Z0-9_-]+\/exec$/.test(url)) {
+      status.textContent = 'デプロイ管理に表示された、末尾が /exec のURLを入力してください。';
+      return;
+    }
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = url;
+    form.target = '_blank';
+    form.rel = 'noopener noreferrer';
+    const payload = document.createElement('input');
+    payload.type = 'hidden';
+    payload.name = 'payroll';
+    payload.value = '[]';
+    form.append(payload);
+    document.body.append(form);
+    try { form.submit(); } finally { form.remove(); }
+    status.textContent = 'Google側に表示されたメッセージを確認してください。';
+  };
+</script>
+</html>
