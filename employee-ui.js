@@ -12,8 +12,16 @@
   let editingId = null;
   settings.open = true;
   $('#editorFields132').append(settings);
-  const special = settings.querySelector('details');
+  const special = $('#empSaturday08').closest('details');
   special.querySelector('summary').textContent = '特別出勤の設定';
+  const advanced = document.createElement('details');
+  const advancedTitle = document.createElement('summary');
+  advancedTitle.textContent = '居住者区分・振込口座・変更履歴';
+  advanced.append(advancedTitle,$('#employeeResidency16').closest('.form-grid'),vaultPanel09,$('#empHistory08').closest('details'));
+  settings.append(advanced);
+  const saveButton = $('#saveEmployee08');
+  $('#closeEditor132').before(saveButton);
+  editor.addEventListener('close',lockVault09);
   $('#empName08').autocomplete = 'off';
 
   // Older exports carry the original fixed-pay records separately. Keep their exact
@@ -113,7 +121,8 @@
       $('#empLegalKind08').value = 'contract';
     }
     special.open = false;
-    $('#empHistory08').closest('details').hidden = !editingId;
+    advanced.hidden = !editingId;
+    advanced.open = false;
     updateFields();
     editor.showModal();
   }
