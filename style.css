@@ -201,3 +201,15 @@ dialog{max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-
 #work[data-pay-step="5"] #outputActions132 button{min-height:48px}
 #payProgress button{font:inherit;min-width:0;min-height:44px;padding:5px 1px}
 #payProgress span{display:grid;align-content:center;min-height:44px}
+
+#work[data-pay-step="5"] #outputActions132{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+#work[data-pay-step="5"] #outputActions132[hidden]{display:none}
+#removePhoto141{max-width:500px}
+#removePhoto141 img{display:block;max-width:100%;max-height:180px;object-fit:contain;margin:.75rem auto}
+#removePhoto141 fieldset{margin:1rem 0;min-width:0;border:1px solid var(--border)}
+#removePhoto141 fieldset label{display:flex;gap:.5rem;align-items:center;min-height:44px}
+#removePhoto141 .actions button,.photo-removal-list button{min-height:44px}
+.photo-removal-list{list-style:none;padding:0;margin:.5rem 0 0}
+.photo-removal-list li{display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin:.4rem 0}
+.photo-removal-list span{min-width:0;overflow-wrap:anywhere}
+.photo-removal-list button{flex-shrink:0}
