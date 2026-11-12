@@ -359,7 +359,7 @@ $('#periodPrint').onclick = function () {
       <h1>${p.month} 給与明細</h1>
       <p><strong>${esc(employee().name)}</strong>　${saved ? '確定済み' : '確認用プレビュー・未確定'}</p>
       <p>対象期間 ${p.start}〜${p.end}　支払日 ${esc(result.settings.payDate)}</p>
-      <p>${day ? `通常出勤 ${day.regularDays}日　土曜出勤 ${day.saturdayDays}日` : `実働 ${hm(result.summary.minutes)}　給与計算用 ${hm(result.summary.payroll)}`}</p>
+      <p>${result.options?.mode==='fixed' ? '固定給' : day ? `通常出勤 ${day.regularDays}日　土曜出勤 ${day.saturdayDays}日` : `実働 ${hm(result.summary.minutes)}　給与計算用 ${hm(result.summary.payroll)}`}</p>
       <div class="slipTables09">${table('支給',result.earnings,result.gross)}${table('控除',result.deductions,result.deductionTotal)}</div>
       ${result.deductionTotal === null ? `<p>確認済み控除小計　<strong>${yen(result.knownDeduction ?? result.deductionTotal ?? 0)}</strong></p>` : ''}
       ${result.taxRefund > 0 ? `<p>還付金（当月調整）　<strong>${yen(result.taxRefund)}</strong></p>` : ''}

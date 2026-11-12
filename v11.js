@@ -86,6 +86,8 @@ $('#excelPreset11').onclick = async () => {
 };
 $('#pay07Deductions').addEventListener('click', event => {
   if (!event.target.closest('[data-open-deduction12]')) return;
+  const parent = payrollSettings11.closest('#payrollOptions132');
+  if (parent) parent.open = true;
   payrollSettings11.open = true;
   payrollSettings11.scrollIntoView({block:'start'});
 });
@@ -98,6 +100,8 @@ settingsLink11.onclick = () => {
     $('#startPay07').scrollIntoView({block:'center'});
     return;
   }
+  const parent = payrollSettings11.closest('#payrollOptions132');
+  if (parent) parent.open = true;
   payrollSettings11.open = true;
   $('#deductionsFold08').open = true;
   $('#deductionsFold08').scrollIntoView({block:'start'});
