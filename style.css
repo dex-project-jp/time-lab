@@ -140,3 +140,13 @@ input, select, textarea {
   #outputActions132{display:grid;grid-template-columns:minmax(0,1fr)}
   #outputActions132[hidden]{display:none}
 }
+
+#employeePurge133{max-width:460px}
+#employeeList132 h4,#pastList133 p{margin:0 0 5px;overflow-wrap:anywhere}
+#pastList133 details{margin:6px 0}
+#pastList133 summary{overflow-wrap:anywhere}
+#pastCount133{color:var(--muted);font-size:.85rem}
+#employeeMonth132.viewing-archive133{grid-template-columns:minmax(0,1fr)}
+#purgeRun133{background:#4e2724;color:#ffe2db;border-color:#a26860}
+#employeeManager132 button,#employeePurge133 button,#employeePurge133 label{min-height:44px}
+#purgeName133,#archiveStatus132{overflow-wrap:anywhere}

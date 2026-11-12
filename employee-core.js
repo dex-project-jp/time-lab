@@ -13,5 +13,18 @@ function eligible(r,old,today,allowHalf=false){if(!date(r.date)||r.date>(today||
 function connect(period,at){if(!period||period.snapshot)return false;const before=copy(period.earnings);let basic=period.earnings.find(i=>i.source==='attendance')||period.earnings.find(i=>i.id==='base'),saturday=period.earnings.find(i=>i.source==='specialAttendance')||period.earnings.find(i=>i.id==='saturday'||i.name==='特別出勤手当'||i.name==='土曜出勤手当');if(!basic){basic={id:'base',name:'基本給',kind:'salary',source:'attendance',amount:0,recurring:true,eiBase:true};period.earnings.push(basic)}else {basic.source='attendance';basic.name='基本給'}if(!saturday){saturday={id:'saturday',name:'土曜出勤手当',kind:'salary',source:'specialAttendance',amount:0,recurring:false,eiBase:true};period.earnings.push(saturday)}else {saturday.source='specialAttendance';saturday.name='土曜出勤手当'}if(JSON.stringify(before)===JSON.stringify(period.earnings))return false;period.conditionMigration||=[];period.conditionMigration.push({at,reason:'v0.8 未確定給与の基本給・土曜手当を自動連動へ統一',earnings:before});return true}
 function ordered(list){const rank=x=>x.id==='base'||x.source==='attendance'?0:x.id==='saturday'||x.source==='specialAttendance'?1:x.id==='special'?2:3;return list.map((x,i)=>({x,i})).sort((a,b)=>rank(a.x)-rank(b.x)||a.i-b.i).map(v=>v.x)}
 function validateStore(store,employees){if(store?.employeeConditions===undefined)return;const ids=new Set(employees.map(e=>e.id));if(!store.employeeConditions||typeof store.employeeConditions!=='object'||Array.isArray(store.employeeConditions))throw Error('従業員給与設定が不正です');for(let [id,history]of Object.entries(store.employeeConditions)){if(!ids.has(id)||!Array.isArray(history)||history.length>500)throw Error('従業員給与履歴のIDまたは件数が不正です');let seen=new Set();for(let c of history){validate(c);if(seen.has(c.effectiveFrom))throw Error('給与設定の適用日が重複しています');seen.add(c.effectiveFrom)}}}
-root.EmployeeCore={connect,nameKey,match,date,validate,legacy,at,put,plan,eligible,ordered,validateStore};if(typeof module!=='undefined')module.exports=root.EmployeeCore;
+function purgeArchived(state,id){
+  if (!state.employees.some(person=>person.id===id && person.archivedAt132)) throw Error('過去の従業員を選び直してください。');
+  for (const map of [state.months,state.payPeriods,state.photoSets,state.payrollV07?.periods]) {
+    for (const key of Object.keys(map ?? {})) if (key.startsWith(id+':')) delete map[key];
+  }
+  for (const key of ['profiles','specialProfiles','employeeConditions','extraProfiles09']) {
+    const map = state.payrollV07?.[key];
+    if (map) delete map[id];
+  }
+  if (state.fixedPayrollSync?.employee?.id===id) state.fixedPayrollSync={employee:null,months:{}};
+  state.employees=state.employees.filter(person=>person.id!==id);
+  if (state.selected===id) state.selected=state.employees.find(person=>!person.archivedAt132)?.id ?? null;
+}
+root.EmployeeCore={connect,nameKey,match,date,validate,legacy,at,put,plan,eligible,ordered,validateStore,purgeArchived};if(typeof module!=='undefined')module.exports=root.EmployeeCore;
 })(typeof window!=='undefined'?window:globalThis);

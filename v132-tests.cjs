@@ -47,3 +47,29 @@ const archived = {...employee,archivedAt132:'2026-11-12T10:00:00.000Z'};
 PayrollCore.validateStore(JSON.parse(JSON.stringify(store)),[archived]);
 EmployeeCore.validateStore(JSON.parse(JSON.stringify(store)),[archived]);
 console.log('Fixed pay without attendance, monthly defaults, deductions, confirmed snapshots and archived backup passed');
+
+const active = {id:'b'.repeat(32),name:'架空 在籍中',mode:'hourly',rate:1300};
+const archivedMonth = archived.id+':'+month;
+const activeMonth = active.id+':'+month;
+const perMonth = {[archivedMonth]:{},[activeMonth]:{kept:true}};
+const perEmployee = {[archived.id]:{},[active.id]:{kept:true}};
+const localBackup = {
+  employees:[archived,active],selected:archived.id,months:perMonth,payPeriods:perMonth,photoSets:perMonth,
+  payrollV07:{periods:perMonth,profiles:perEmployee,specialProfiles:perEmployee,extraProfiles09:perEmployee,employeeConditions:perEmployee,taxTables:{2026:{kept:true}}},
+  fixedPayrollSync:{employee:{id:archived.id},months:{[month]:row}}
+};
+const restoredBackup = JSON.parse(JSON.stringify(localBackup));
+assert.throws(()=>EmployeeCore.purgeArchived(restoredBackup,active.id),/過去の従業員/);
+EmployeeCore.purgeArchived(restoredBackup,archived.id);
+assert.deepEqual(restoredBackup.employees,[active]);
+assert.equal(restoredBackup.selected,active.id);
+for (const map of [restoredBackup.months,restoredBackup.payPeriods,restoredBackup.photoSets,restoredBackup.payrollV07.periods]) {
+  assert.deepEqual(map,{[activeMonth]:{kept:true}});
+}
+for (const key of ['profiles','specialProfiles','extraProfiles09','employeeConditions']) {
+  assert.deepEqual(restoredBackup.payrollV07[key],{[active.id]:{kept:true}});
+}
+assert.deepEqual(restoredBackup.fixedPayrollSync,{employee:null,months:{}});
+assert.deepEqual(restoredBackup.payrollV07.taxTables,localBackup.payrollV07.taxTables);
+assert.equal(localBackup.employees.length,2);
+console.log('Archived employee purge removes only the intended employee data');

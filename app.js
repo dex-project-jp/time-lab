@@ -10,9 +10,26 @@ function monthData(){let k=employee().id+':'+state.month;if(!state.months[k])sta
 function config(){return {...employee(),...monthData().settings}}
 function days(){return new Date(+state.month.slice(0,4),+state.month.slice(5),0).getDate()}
 function getRow(d){const m=monthData();return m.rows[d]||(m.rows[d]={day:d,times:['','','',''],am:false,pm:false,reviewed:false,original:[],note:'',sourceIds:[]})}
-function save(){for(let [key,m] of Object.entries(state.months)){let e=state.employees.find(e=>key.startsWith(e.id+':'));let cfg=m.settings||e;if(cfg)m.calculated={...TimeCore.summary(Object.values(m.rows),cfg.mode,cfg.rate),mode:cfg.mode,rate:cfg.rate,rounding:'monthly-ceil-15-minutes',updatedAt:new Date().toISOString()}}const snapshot=structuredClone(state);saveQueue=saveQueue.catch(()=>{}).then(()=>new Promise((resolve,reject)=>{let t=db.transaction('data','readwrite');t.objectStore('data').put(snapshot,'state');t.oncomplete=resolve;t.onerror=()=>reject(t.error)})).catch(e=>{toast('保存できません。バックアップを書き出してください');console.error(e)});return saveQueue}
+function persistState(){
+  const snapshot = structuredClone(state);
+  saveQueue = saveQueue.catch(()=>{}).then(()=>new Promise((resolve,reject)=>{
+    const transaction = db.transaction('data','readwrite');
+    transaction.objectStore('data').put(snapshot,'state');
+    transaction.oncomplete = resolve;
+    transaction.onabort = () => reject(transaction.error);
+  }));
+  return saveQueue;
+}
+function save(){
+  for (const [key,month] of Object.entries(state.months)) {
+    const employee = state.employees.find(person=>key.startsWith(person.id+':'));
+    const config = month.settings || employee;
+    if (config) month.calculated = {...TimeCore.summary(Object.values(month.rows),config.mode,config.rate),mode:config.mode,rate:config.rate,rounding:'monthly-ceil-15-minutes',updatedAt:new Date().toISOString()};
+  }
+  return persistState().catch(error=>{toast('保存できません。バックアップを書き出してください');console.error(error)});
+}
 async function init(){if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));try{db=await new Promise((res,rej)=>{const r=indexedDB.open('time-lab',1);r.onupgradeneeded=()=>r.result.createObjectStore('data');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});state=await new Promise((res,rej)=>{const r=db.transaction('data').objectStore('data').get('state');r.onsuccess=()=>res(r.result||initial());r.onerror=()=>rej(r.error)});state.selected=employee()?.id??null;render();}catch(e){toast('端末内保存が利用できません');$('#work').innerHTML='<p>IndexedDBが利用できません。Safariの通常モードで開いてください。</p>';console.error(e)}}
-function render(){let e=config();$('#employee').innerHTML=state.employees.filter(x=>!x.archivedAt132||x.id===state.selected).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');$('#employee').value=e.id;$('#employeeName').value=e.name;$('#month').value=state.month;$('#mode').value=e.mode;$('#rate').value=e.rate;$('#rateLabel').hidden=e.mode!=='hourly';renderRows();renderSummary();renderImages();if(typeof renderPayroll==='function')renderPayroll()}
+function render(){let e=config();$('#employee').innerHTML=state.employees.filter(x=>!x.archivedAt132).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');$('#employee').value=e.id;$('#employeeName').value=e.name;$('#month').value=state.month;$('#mode').value=e.mode;$('#rate').value=e.rate;$('#rateLabel').hidden=e.mode!=='hourly';renderRows();renderSummary();renderImages();if(typeof renderPayroll==='function')renderPayroll()}
 const hm=n=>`${Math.floor(n/60)}時間${String(n%60).padStart(2,'0')}分`;
 function renderSummary(){let e=config(),s=TimeCore.summary(Array.from({length:days()},(_,i)=>getRow(i+1)),e.mode,e.rate);let cards=e.mode==='daily'?[['出勤日数',s.days+'日',`全日 ${s.full}日 / 半日 ${s.half}日`],['全日・半日',`${s.full} / ${s.half}`,'確認済みの出勤を集計'],['要確認',s.pending+'日','未確認・打刻の矛盾']]:[['実勤務時間',hm(s.minutes),'確認済み日・1分単位'],['給与計算用',hm(s.payroll),'月間合計を15分切り上げ'],['基本賃金',s.wage.toLocaleString()+'円',`時給 ${e.rate.toLocaleString()}円 · 要確認 ${s.pending}日`]];$('#summary').innerHTML=cards.map(([a,b,c])=>`<div class="metric"><small>${a}</small><strong>${b}</strong><span>${c}</span></div>`).join('')}
 function renderRows(){let e=config();$('#rows').innerHTML=Array.from({length:days()},(_,i)=>{let r=getRow(i+1),v=TimeCore.inspect(r),ok=r.reviewed&&!v.errors.length,desc=e.mode==='daily'?(r.am&&r.pm?'全日 1日':r.am||r.pm?'半日 0.5日':'出勤なし'):hm(v.minutes);return `<details data-day="${r.day}"><summary><b>${String(r.day).padStart(2,'0')}日</b><span>${esc(desc)}</span><span class="badge ${ok?'ok':''}">${ok?'確認済み':'要確認'}${v.errors.length?' · 矛盾':''}</span><span>⌄</span></summary><div class="day-body"><div class="time-grid">${['午前 出勤','午前 退勤','午後 出勤','午後 退勤'].map((l,j)=>`<label>${l}<input type="time" data-time="${j}" value="${esc(r.times[j])}"></label>`).join('')}</div>${e.mode==='daily'?`<div class="checks"><label><input type="checkbox" data-presence="am" ${r.am?'checked':''}>午前に出勤</label><label><input type="checkbox" data-presence="pm" ${r.pm?'checked':''}>午後に出勤</label></div>`:''}<p class="error">${esc(v.errors.join(' / '))}</p><label>メモ・修正理由<input data-note value="${esc(r.note)}" maxlength="500"></label><p class="muted">OCR原値: ${esc(r.original.length?r.original.map(x=>x.text+' ('+Math.round(x.confidence)+'%)').join(' / '):'読み取りなし')}<br>出勤・退勤が両方空欄でも、休みと確認したら確認済みにしてください。</p>${r.sourceIds.map(id=>{let img=monthData().images.find(x=>x.id===id);return img?`<button class="secondary source" data-id="${img.id}">撮影画像と照合 ↗</button>`:''}).join(' ')}<div class="actions"><button class="confirm-day">${ok?'確認を解除':'この日を確認済みにする'}</button></div></div></details>`}).join('')}

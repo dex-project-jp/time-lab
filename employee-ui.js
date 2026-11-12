@@ -192,70 +192,173 @@
     button.onclick = callback;
     return button;
   }
+  const past = $('#pastEmployees133');
+  const purgeDialog = $('#employeePurge133');
+  const purgeCheck = $('#purgeChecked133');
+  const purgeNext = $('#purgeNext133');
+  const purgeRun = $('#purgeRun133');
+  const purgeStatus = $('#purgeStatus133');
+  let purgeId = null;
+  let savingEmployee = false;
+  let archiveView = null;
+
   function updateManager() {
-    const list = $('#employeeList132');
-    list.replaceChildren();
+    const currentList = $('#employeeList132');
+    const pastList = $('#pastList133');
+    currentList.replaceChildren();
+    pastList.replaceChildren();
     for (const person of state.employees) {
-      const item = document.createElement('section');
-      const name = document.createElement('h3');
-      name.textContent = person.name;
       const detail = document.createElement('p');
-      detail.textContent = labels[conditionFor(person).mode] + (person.archivedAt132 ? ' · 削除済み（履歴あり）' : '');
+      detail.textContent = labels[conditionFor(person).mode];
       const buttons = document.createElement('div');
       buttons.className = 'actions';
       if (person.archivedAt132) {
-        buttons.append(action('履歴を見る',()=>{state.selected=person.id;manager.close();render();}));
-        buttons.append(action('一覧に戻す',()=>changeEmployee(person,'restore')));
-        const more = document.createElement('details');
-        const summary = document.createElement('summary');
-        summary.textContent = 'テストデータの完全削除';
-        more.append(summary,action('完全削除',()=>changeEmployee(person,'purge')));
-        item.append(name,detail,buttons,more);
-      } else {
-        buttons.append(action('編集',()=>openEditor(person)),action('削除',()=>changeEmployee(person,'archive')));
+        const item = document.createElement('details');
+        const name = document.createElement('summary');
+        name.textContent = person.name;
+        buttons.append(action('詳細を見る',()=>viewArchived(person)));
+        buttons.append(action('在籍中に戻す',()=>changeEmployee(person.id,'restore')));
+        buttons.append(action('完全削除',()=>reviewPurge(person)));
         item.append(name,detail,buttons);
-      }
-      list.append(item);
-    }
-    if (!state.employees.length) list.textContent = '従業員は未登録です。';
-  }
-
-  async function changeEmployee(person,operation) {
-    try {
-      if (operation==='archive') {
-        if (!confirm(person.name+'さんを一覧から削除しますか？ 確定済み給与や勤怠は履歴に残ります。')) return;
-        person.archivedAt132 = new Date().toISOString();
-        if (state.selected===person.id) state.selected = state.employees.find(e=>!e.archivedAt132)?.id ?? null;
-      } else if (operation==='restore') {
-        delete person.archivedAt132;
-        state.selected = person.id;
+        pastList.append(item);
       } else {
-        if (!confirm(person.name+'さんの端末内の勤怠・写真・確定給与を完全削除します。元に戻せません。実行しますか？')) return;
-        for (const map of [state.months,state.payPeriods,state.photoSets,state.payrollV07?.periods]) {
-          for (const key of Object.keys(map ?? {})) if (key.startsWith(person.id+':')) delete map[key];
-        }
-        for (const key of ['profiles','specialProfiles','employeeConditions','extraProfiles09']) {
-          const map = state.payrollV07?.[key];
-          if (map) delete map[person.id];
-        }
-        if (state.fixedPayrollSync?.employee?.id===person.id) state.fixedPayrollSync=emptyLegacy();
-        state.employees = state.employees.filter(e=>e.id!==person.id);
-        if (state.selected===person.id) state.selected = state.employees.find(e=>!e.archivedAt132)?.id ?? null;
-        localStorage.removeItem(vaultKey09(person.id));
+        const item = document.createElement('section');
+        const name = document.createElement('h4');
+        name.textContent = person.name;
+        buttons.append(action('編集',()=>openEditor(person)),action('削除',()=>{
+          if (confirm(person.name+'さんを「過去の従業員」に移しますか？ 設定・勤怠・給与履歴は保持されます。')) {
+            changeEmployee(person.id,'archive');
+          }
+        }));
+        item.append(name,detail,buttons);
+        currentList.append(item);
       }
-      await persistPay();
-      savedChecks08.clear();
-      render();
-      updateManager();
-      managerStatus.textContent = {archive:'従業員を一覧から削除しました。',restore:'従業員一覧に戻しました。',purge:'端末内のデータを完全削除しました。'}[operation];
-    } catch (error) { managerStatus.textContent = error.message; }
+    }
+    $('#pastCount133').textContent = pastList.childElementCount+'人';
+    if (!currentList.childElementCount) currentList.textContent = '在籍中の従業員はいません。';
+    if (!pastList.childElementCount) pastList.textContent = '過去の従業員はいません。';
   }
 
-  $('#manageEmployees132').onclick = () => {
+  function viewArchived(person) {
+    if (savingEmployee) return;
+    if (!archiveView) archiveView = {id:state.selected, month:currentMonth()};
+    const prefix = person.id+':';
+    const months = Object.entries(payStore().periods ?? {})
+      .filter(([key,period])=>key.startsWith(prefix) && (period.snapshot || period.revisions?.length))
+      .map(([key])=>key.slice(prefix.length));
+    if (state.fixedPayrollSync?.employee?.id===person.id) months.push(...Object.keys(state.fixedPayrollSync.months));
+    state.selected = person.id;
+    state.salaryMonth = months.sort().at(-1) ?? currentMonth();
+    $('#salaryMonth').value = state.salaryMonth;
+    manager.close();
+    render();
+    $('#archiveStatus132').focus();
+  }
+
+  function closeArchiveView() {
+    if (!archiveView) return;
+    state.selected = archiveView.id;
+    state.salaryMonth = archiveView.month;
+    $('#salaryMonth').value = archiveView.month;
+    archiveView = null;
+    render();
+  }
+
+  function reviewPurge(person) {
+    if (savingEmployee) return;
+    purgeId = person.id;
+    $('#purgeName133').textContent = '対象：'+person.name;
+    $('#purgeFinal133').hidden = true;
+    purgeNext.hidden = false;
+    purgeRun.hidden = true;
+    purgeRun.disabled = true;
+    purgeCheck.checked = false;
+    purgeStatus.textContent = '';
+    purgeDialog.showModal();
+  }
+  purgeNext.onclick = () => {
+    $('#purgeFinal133').hidden = false;
+    purgeNext.hidden = true;
+    purgeRun.hidden = false;
+    purgeCheck.focus();
+  };
+  purgeCheck.onchange = () => { purgeRun.disabled = !purgeCheck.checked; };
+  purgeRun.onclick = () => {
+    if (!purgeRun.hidden && purgeCheck.checked) changeEmployee(purgeId,'purge');
+  };
+  $('#purgeCancel133').onclick = () => { if (!savingEmployee) purgeDialog.close(); };
+  for (const dialog of [purgeDialog,manager]) {
+    dialog.addEventListener('cancel',event=>{ if (savingEmployee) event.preventDefault(); });
+  }
+
+  async function changeEmployee(id,operation) {
+    if (savingEmployee) return;
+    const person = state.employees.find(item=>item.id===id);
+    if (!person || Boolean(person.archivedAt132)===(operation==='archive')) return;
+    savingEmployee = true;
+    manager.inert = true;
+    purgeRun.disabled = true;
+    const previous = state;
+    const storageBackup = new Map();
+    try {
+      state = structuredClone(previous);
+      const selected = state.employees.find(item=>item.id===id);
+      if (operation==='archive') {
+        selected.archivedAt132 = new Date().toISOString();
+        if (state.selected===id) state.selected = state.employees.find(item=>!item.archivedAt132)?.id ?? null;
+      } else if (operation==='restore') {
+        delete selected.archivedAt132;
+        state.selected = id;
+      } else {
+        EmployeeCore.purgeArchived(state,id);
+        const bankKey = vaultKey09(id);
+        const legacy = localStorage.getItem(legacyKey);
+        let legacyOwner;
+        try { legacyOwner = JSON.parse(legacy)?.employee?.id; } catch { /* Leave unreadable legacy data intact. */ }
+        for (const key of legacyOwner===id ? [bankKey,legacyKey] : [bankKey]) {
+          const value = localStorage.getItem(key);
+          if (value===null) continue;
+          localStorage.removeItem(key);
+          storageBackup.set(key,value);
+        }
+      }
+      await persistState();
+    } catch {
+      state = previous;
+      for (const [key,value] of storageBackup) localStorage.setItem(key,value);
+      const status = operation==='purge' ? purgeStatus : managerStatus;
+      status.textContent = '変更を保存できませんでした。もう一度お試しください。';
+      return;
+    } finally {
+      savingEmployee = false;
+      manager.inert = false;
+      purgeRun.disabled = !purgeCheck.checked;
+    }
+    if (purgeDialog.open) purgeDialog.close();
+    savedChecks08.clear();
+    render();
+    updateManager();
+    if (operation==='archive') past.open = true;
+    managerStatus.textContent = {
+      archive:'過去の従業員に移動しました。',restore:'在籍中に戻しました。',purge:'端末内のデータを完全削除しました。'
+    }[operation];
+  }
+
+  function openManager(showPast = false) {
+    if (!state || savingEmployee) return;
+    closeArchiveView();
     managerStatus.textContent = '';
     updateManager();
+    past.open = showPast;
     manager.showModal();
-  };
+  }
+  $('#manageEmployees132').onclick = () => openManager(Boolean(archiveView));
+  const historyBack = action('過去の従業員に戻る',()=>openManager(true));
+  historyBack.hidden = true;
+  $('#archiveStatus132').after(historyBack);
+  $('#archiveStatus132').tabIndex = -1;
+  const employeeMonth = $('#employeeMonth132');
+  const legacyAttendanceSettings = $('#employeeName').closest('details');
 
   const baseField = document.createElement('label');
   baseField.id = 'currentFixed132';
@@ -329,7 +432,7 @@
       baseInput.value = period.fixedBase132 ?? conditionFor(person).monthlyBase ?? '';
     }
     if (fixed && period && locked) $('#dayPaySummary').textContent = '固定給';
-    if (fixed) $('#attendanceTop').hidden = true;
+    if (fixed || archived) $('#attendanceTop').hidden = true;
     $('#captureFold08').hidden = archived;
     $('#importFold08').hidden = archived;
     $('#attendanceFold08').hidden = archived;
@@ -354,15 +457,25 @@
     $('#deductionsFold08').open = !locked;
     const legacyInfo = $('#archiveStatus132');
     legacyInfo.hidden = !archived;
-    legacyInfo.textContent = archived ? person.name+'さんの履歴を表示中。従業員管理から一覧に戻せます。' : '';
+    if (archived) {
+      const condition = conditionFor(person);
+      const terms = condition.mode==='fixed' ? '月額基本給 '+yen(condition.monthlyBase) : '基本時給 '+yen(condition.rate);
+      legacyInfo.textContent = person.name+' · '+labels[condition.mode]+' · '+terms;
+    }
   };
   const previousRender = render;
   render = function() {
     if (!state) return;
     try { adoptLegacy(); } catch (error) { toast(error.message); }
+    if (!archiveView && employee()?.archivedAt132) state.selected = null;
     const active = employee();
+    const archived = Boolean(active?.archivedAt132);
     const empty = !active;
-    $('#employee').closest('label').hidden = empty;
+    employeeMonth.classList.toggle('viewing-archive133',archived);
+    $('#employee').closest('label').hidden = empty || archived;
+    $('#manageEmployees132').hidden = archived;
+    historyBack.hidden = !archived;
+    legacyAttendanceSettings.hidden = empty || archived;
     $('#salaryMonth').closest('label').hidden = empty;
     $('#addEmployee').hidden = !empty;
     for (const child of [...oldWork.children].slice(1)) {
