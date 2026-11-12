@@ -335,6 +335,7 @@
     render();
     updateManager();
     if (operation==='archive') past.open = true;
+    if (operation==='purge') window.clearPayrollStepData?.(id);
     managerStatus.textContent = {
       archive:'過去の従業員に移動しました。',restore:'在籍中に戻しました。',purge:'端末内のデータを完全削除しました。'
     }[operation];
@@ -422,7 +423,7 @@
     const locked = Boolean(period?.snapshot);
     $('#pay07Panel').querySelector('p').hidden = archived || locked;
     if (!archived && $('#pay07Status').textContent==='この月の確定済み給与はありません。') $('#pay07Status').textContent = '';
-    $('#pay07Panel').querySelector('h3').textContent = archived?'給与履歴':fixed?'給与を計算・確定する':'4. 給与を計算・確定する';
+    $('#pay07Panel').querySelector('h3').textContent = archived?'給与履歴':'給与の明細';
     baseField.hidden = !fixed || !period || locked || archived;
     if (!baseField.hidden && document.activeElement!==baseInput) {
       baseInput.value = period.fixedBase132 ?? conditionFor(person).monthlyBase ?? '';
@@ -433,9 +434,7 @@
     $('#importFold08').hidden = archived;
     $('#attendanceFold08').hidden = archived;
     $('#calendarDetails').hidden = archived;
-    const attendance = $('#attendanceFold08');
-    if (fixed) $('#salaryPanel').after($('#captureFold08'),$('#importFold08'),attendance);
-    else $('#salaryPanel').before($('#captureFold08'),$('#importFold08'),attendance,$('#attendanceTop'));
+
     if (archived && !locked) {
       $('#pay07Body').hidden = true;
       $('#startPay07').hidden = true;
@@ -449,8 +448,7 @@
     $('#revisePay07').hidden = !locked || archived || !!period?.legacyFixed132;
     $('#payrollOptions132').hidden = archived || !!period?.legacyFixed132;
     output.hidden = !locked;
-    $('#earningsFold08').open = !locked;
-    $('#deductionsFold08').open = !locked;
+
     const legacyInfo = $('#archiveStatus132');
     legacyInfo.hidden = !archived;
     if (archived) {
@@ -468,12 +466,13 @@
     const archived = Boolean(active?.archivedAt132);
     const empty = !active;
     employeeMonth.classList.toggle('viewing-archive133',archived);
-    $('#employee').closest('label').hidden = empty || archived;
+    $('#employee').closest('label').hidden = true;
     historyBack.hidden = !archived;
     legacyAttendanceSettings.hidden = empty || archived;
     $('#salaryMonth').closest('label').hidden = empty;
     $('#addEmployee').hidden = !empty;
     for (const child of [...oldWork.children].slice(1)) {
+      if (child.hasAttribute('data-step-ui')) continue;
       if (empty) child.hidden = true;
       else if (['salaryPanel','attendanceTop'].includes(child.id)) child.hidden = false;
     }

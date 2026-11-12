@@ -51,7 +51,7 @@ function showExportFile(file, label, preview) {
   $('#payrollExportActions').append(exportButton(label + 'を書き出す', () => download(file.name, file, file.type)));
 }
 
-async function openPayrollExport(forCompany, historical = null) {
+async function openPayrollExport(forCompany, historical = null, combined = false) {
   if (!state || (!historical && !payPeriod())) {
     $('#payrollExportNotice').textContent = '給与を作成してから出力してください。';
     return;
@@ -62,10 +62,10 @@ async function openPayrollExport(forCompany, historical = null) {
   const payrollState = $('#payrollExportState');
   const photoStatus = $('#payrollExportPhotos');
   const zipActions = $('#payrollExportZip');
-  const fallback = forCompany ?
+  const fallback = (forCompany || combined) ?
     'まとめて共有できない場合は「その他の操作」からZIPをお使いください。' :
     'まとめて共有できない場合は「その他の操作」からファイルを書き出し、手動で添付してください。';
-  $('#payrollExportTitle').textContent = historical ? '確定明細を再出力' : forCompany ? '管理会社へ送る' : 'パソコンへ送る';
+  $('#payrollExportTitle').textContent = combined ? '給与明細を送る' : historical ? '確定明細を再出力' : forCompany ? '管理会社へ送る' : 'パソコンへ送る';
   $('#payrollExportNotice').textContent = '';
   $('#payrollExportFiles').replaceChildren();
   $('#payrollExportActions').replaceChildren();
@@ -76,7 +76,7 @@ async function openPayrollExport(forCompany, historical = null) {
   exportOther.open = false;
   exportSend.disabled = true;
   exportSend.onclick = null;
-  exportSend.textContent = forCompany ? 'この内容で送る' : 'PDFとExcelを送る';
+  exportSend.textContent = (forCompany || combined) ? 'この内容で送る' : 'PDFとExcelを送る';
   exportStatus.textContent = '添付ファイルを準備しています…';
   $('#payrollExportContext').textContent = historical ? historical.name+' / '+historical.month : employee().name+' / '+salaryMonth();
   exportDialog.showModal();
@@ -92,7 +92,8 @@ async function openPayrollExport(forCompany, historical = null) {
     const pdf = await PayrollExport.pdf(model);
     if (!current()) return;
     const attachments = [{file:pdf, label:'給与明細PDF'}];
-    if (forCompany) {
+    if (combined || !forCompany) attachments.push({file:await PayrollExport.workbook(model), label:'給与明細Excel'});
+    if (forCompany || combined) {
       const missing = [];
       for (const slot of selectedPair().reverse()) {
         const isPrevious = slot.half === 'second';
@@ -106,8 +107,6 @@ async function openPayrollExport(forCompany, historical = null) {
         attachments.push({file, label:'タイムカード写真 ' + date, preview:slot.image});
       }
       if (missing.length) photoStatus.textContent = '写真未登録：' + missing.join('、');
-    } else {
-      attachments.push({file:await PayrollExport.workbook(model), label:'給与明細Excel'});
     }
     if (!current()) return;
 
@@ -116,7 +115,7 @@ async function openPayrollExport(forCompany, historical = null) {
     exportOther.hidden = false;
     if (shareableFiles(files)) {
       exportSend.onclick = () => {
-        if (current()) return sharePayrollFiles(files, current, fallback, forCompany);
+        if (current()) return sharePayrollFiles(files, current, fallback, forCompany || combined);
       };
       exportSend.disabled = false;
       exportStatus.textContent = '';
@@ -125,7 +124,7 @@ async function openPayrollExport(forCompany, historical = null) {
       exportStatus.textContent = fallback;
     }
 
-    if (forCompany) {
+    if (forCompany || combined) {
       try {
         const zip = await PayrollExport.archive(files, model.stem + '_管理会社用');
         if (!current()) return;
