@@ -16,8 +16,8 @@
   special.querySelector('summary').textContent = '特別出勤の設定';
   const advanced = document.createElement('details');
   const advancedTitle = document.createElement('summary');
-  advancedTitle.textContent = '居住者区分・振込口座・変更履歴';
-  advanced.append(advancedTitle,$('#employeeResidency16').closest('.form-grid'),vaultPanel09,$('#empHistory08').closest('details'));
+  advancedTitle.textContent = '従業員の詳細設定';
+  advanced.append(advancedTitle,$('#employeeResidency16').closest('.form-grid'),vaultPanel09,legacySpecialSettings09,$('#empHistory08').closest('details'));
   settings.append(advanced);
   const saveButton = $('#saveEmployee08');
   $('#closeEditor132').before(saveButton);
@@ -90,7 +90,7 @@
     const fixed = mode.value === 'fixed';
     $('#monthlyBaseField132').hidden = !fixed;
     $('#empRate08').closest('label').hidden = fixed;
-    $('#empSpecialSalary08').closest('label').hidden = fixed;
+    legacySpecialSettings09.hidden = fixed;
     $('#effectiveField132').hidden = !editingId;
     special.hidden = fixed;
   }
