@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ja">
+<head><base target="_top"><meta charset="utf-8">
+<style>
+body{font:17px system-ui,sans-serif;margin:1.25rem;color:#202124}
+main{max-width:42rem;margin:auto}section{border-bottom:1px solid #ccc;padding:.75rem 0}
+h1{font-size:1.45rem}h2{font-size:1.1rem}button{font:inherit;padding:.65rem 1rem;margin-top:1rem}
+ul{padding-left:1.35rem}code{overflow-wrap:anywhere}
+</style></head>
+<body><main>
+<h1>TIME LAB 給与同期</h1>
+<? for (const item of preview) { ?>
+<section>
+<h2><?= item.row.name ?>（<?= item.row.month ?>給与）</h2>
+<p>従業員ID <code><?= item.row.id ?></code></p>
+<p><?= {same:'同期済み',update:'既存の確定給与を更新',insert:'新規登録'}[item.action] ?></p>
+<? if (item.action === 'update') { ?>
+<details><summary>更新前の明細</summary>
+<p>支給総額 <?= item.old[15] ?>円 / 控除総額 <?= item.old[21] ?>円 / 差引 <?= item.old[22] ?>円</p>
+<ul><? for (const line of [...JSON.parse(item.old[26]),...JSON.parse(item.old[27])]) { ?>
+<li><?= line.name ?> <?= line.amount ?>円</li>
+<? } ?></ul></details>
+<? } ?>
+<p>支給総額 <?= item.row.gross ?>円 / 控除総額 <?= item.row.deductionTotal ?>円 / 差引 <?= item.row.net ?>円</p>
+<details><summary>送信する明細</summary>
+<ul><? for (const line of [...item.row.earnings,...item.row.deductions]) { ?>
+<li><?= line.name ?> <?= line.amount ?>円</li>
+<? } ?></ul></details>
+</section>
+<? } ?>
+<? if (preview.some(item => item.action === 'update')) { ?>
+<p><label><input id="confirmUpdate" type="checkbox"> 更新内容を確認しました。更新前の給与は履歴に残ります。</label></p>
+<? } ?>
+<textarea id="payload" hidden><?= payload ?></textarea>
+<input type="hidden" id="nonce" value="<?= nonce ?>">
+<button id="commit" type="button">同期を確定</button>
+<p role="status" id="status"></p>
+</main>
+<script>
+const button = document.getElementById('commit');
+const status = document.getElementById('status');
+const update = document.getElementById('confirmUpdate');
+button.onclick = () => {
+  if (update && !update.checked) {
+    status.textContent = '既存給与の更新内容を確認してください。';
+    return;
+  }
+  button.disabled = true;
+  status.textContent = '同期中…';
+  google.script.run.withSuccessHandler(result => {
+    status.textContent = '同期完了（登録・更新 '+result.changed+'件、同期済み '+result.unchanged+'件）';
+  }).withFailureHandler(() => {
+    status.textContent = '同期を確認できませんでした。TIME LABから再送信してください。';
+  }).commitPayroll(document.getElementById('payload').value,document.getElementById('nonce').value);
+};
+</script>
+</body></html>
