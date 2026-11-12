@@ -8,7 +8,8 @@ function checkOwner_() {
 
 function doGet() {
   checkOwner_();
-  return HtmlService.createHtmlOutput('TIME LABの「パソコンに反映」から確定給与を送ってください。');
+  getBook_();
+  return HtmlService.createHtmlOutput('TIME LAB 給与同期の接続を確認しました。TIME LABの「パソコンに反映」から確定給与を送ってください。');
 }
 
 function doPost(event) {
@@ -18,7 +19,7 @@ function doPost(event) {
     if (!data || data.length > 150000) throw Error('送信した給与を確認してください');
     const rows = normalizeRows_(JSON.parse(data));
     const book = getBook_();
-    const current = readMaster_(book.master);
+    const current = readMaster_(book.id);
     const expected = rows.map(row => current.get(key_(row))?.revision ?? null);
     const preview = rows.map((row,i) => {
       const old = current.get(key_(row));
@@ -30,7 +31,7 @@ function doPost(event) {
     view.preview = preview;
     view.payload = JSON.stringify(rows);
     view.nonce = nonce;
-    return view.evaluate().setTitle('TIME LAB 給与同期');
+    return view.evaluate().setTitle('TIME LAB 給与同期').addMetaTag('viewport','width=device-width, initial-scale=1');
   } catch (error) {
     return HtmlService.createHtmlOutput('確認画面を開けませんでした。Googleアカウント、接続設定、マスターの列構成を確認し、TIME LABから再送信してください。');
   }
@@ -67,17 +68,27 @@ function getBook_() {
   return {id,master:getSheet('確定給与',PayrollSync.headers),history:getSheet('更新履歴',['履歴記録日時',...PayrollSync.headers])};
 }
 
-function readMaster_(sheet) {
-  const last = sheet.getLastRow();
+function readMaster_(bookId) {
+  const result = Sheets.Spreadsheets.Values.get(bookId,"'確定給与'!A2:AE",{valueRenderOption:'UNFORMATTED_VALUE'});
   const found = new Map();
-  if (last < 2) return found;
-  const data = sheet.getRange(2,1,last-1,PayrollSync.headers.length).getValues();
-  data.forEach((values,i) => {
+  (result.values || []).forEach((values,i) => {
+    if (!values.some(value => value !== '')) return;
     const key = values[0], revision = values[25], hash = values[30];
     if (!key || !revision || !hash || found.has(key)) throw Error('同期マスターに不整合があります');
     found.set(key,{index:i+1,values,revision,hash});
   });
   return found;
+}
+
+function verifySaved_(current, row, hash) {
+  const saved = current.get(key_(row));
+  if (!saved || saved.hash !== hash) throw Error('スプレッドシートの反映を確認できません');
+  const expected = PayrollSync.values(row,saved.values[24],saved.revision,hash);
+  // Reconfirming the same figures keeps the original finalization and sync timestamps.
+  expected[29] = saved.values[29];
+  if (expected.some((value,i) => (value ?? '') !== (saved.values[i] ?? ''))) {
+    throw Error('スプレッドシートの値が送信内容と一致しません');
+  }
 }
 
 function cells_(values) {
@@ -100,7 +111,7 @@ function commitPayroll(payload, nonce) {
     const {expected,hashes,previewHash} = JSON.parse(cached);
     if (digest_(JSON.stringify(rows)) !== previewHash) throw Error('確認した給与と一致しません');
     const book = getBook_();
-    const current = readMaster_(book.master);
+    const current = readMaster_(book.id);
     const requests = [], additions = [], history = [];
     const at = new Date().toISOString();
     rows.forEach((row,i) => {
@@ -122,7 +133,8 @@ function commitPayroll(payload, nonce) {
     if (additions.length) requests.push({appendCells:{sheetId:book.master.getSheetId(),rows:additions,fields:'userEnteredValue'}});
     if (history.length) requests.push({appendCells:{sheetId:book.history.getSheetId(),rows:history,fields:'userEnteredValue'}});
     if (requests.length) Sheets.Spreadsheets.batchUpdate({requests},book.id);
-    cache.remove('preview:'+nonce);
+    const verified = requests.length ? readMaster_(book.id) : current;
+    rows.forEach((row,i) => verifySaved_(verified,row,hashes[i]));
     return {changed:additions.length+history.length, unchanged:rows.length-additions.length-history.length};
   } finally { lock.releaseLock(); }
 }

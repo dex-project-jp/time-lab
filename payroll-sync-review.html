@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="ja">
-<head><base target="_top"><meta charset="utf-8">
+<head><base target="_top"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 body{font:17px system-ui,sans-serif;margin:1.25rem;color:#202124}
 main{max-width:42rem;margin:auto}section{border-bottom:1px solid #ccc;padding:.75rem 0}
@@ -13,7 +13,7 @@ ul{padding-left:1.35rem}code{overflow-wrap:anywhere}
 <section>
 <h2><?= item.row.name ?>（<?= item.row.month ?>給与）</h2>
 <p>従業員ID <code><?= item.row.id ?></code></p>
-<p><?= {same:'同期済み',update:'既存の確定給与を更新',insert:'新規登録'}[item.action] ?></p>
+<p><?= {same:'同期済み',update:'未同期の変更あり',insert:'未同期（新規）'}[item.action] ?></p>
 <? if (item.action === 'update') { ?>
 <details><summary>更新前の明細</summary>
 <p>支給総額 <?= item.old[15] ?>円 / 控除総額 <?= item.old[21] ?>円 / 差引 <?= item.old[22] ?>円</p>
@@ -40,6 +40,7 @@ ul{padding-left:1.35rem}code{overflow-wrap:anywhere}
 const button = document.getElementById('commit');
 const status = document.getElementById('status');
 const update = document.getElementById('confirmUpdate');
+let attempt = 0;
 button.onclick = () => {
   if (update && !update.checked) {
     status.textContent = '既存給与の更新内容を確認してください。';
@@ -47,10 +48,21 @@ button.onclick = () => {
   }
   button.disabled = true;
   status.textContent = '同期中…';
+  const currentAttempt = ++attempt;
+  const allowRetry = () => {
+    if (attempt !== currentAttempt) return;
+    button.disabled = false;
+    status.textContent = '同期結果を確認できませんでした。もう一度「同期を確定」を押してください。繰り返し失敗する場合はTIME LABから開き直してください。';
+  };
+  const timeout = setTimeout(allowRetry,25000);
   google.script.run.withSuccessHandler(result => {
+    clearTimeout(timeout);
+    if (attempt !== currentAttempt) return;
+    button.disabled = true;
     status.textContent = '同期完了（登録・更新 '+result.changed+'件、同期済み '+result.unchanged+'件）';
   }).withFailureHandler(() => {
-    status.textContent = '同期を確認できませんでした。TIME LABから再送信してください。';
+    clearTimeout(timeout);
+    allowRetry();
   }).commitPayroll(document.getElementById('payload').value,document.getElementById('nonce').value);
 };
 </script>

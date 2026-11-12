@@ -5,11 +5,27 @@
   const endpoint = $('#payrollSyncEndpoint');
   const prefsKey = 'time-lab-payroll-sync-endpoint-v1';
   const fixedKey = 'time-lab-fixed-payroll-v1';
-  const readFixed = () => JSON.parse(localStorage.getItem(fixedKey) || '{"employee":null,"months":{}}');
+  const settings = $('#payrollSyncSetup');
+  const sendButton = $('#sendPayrollSync');
+  const validEndpoint = url => /^https:\/\/script\.google\.com\/(?:a\/macros\/[a-zA-Z0-9.-]+|macros)\/s\/[a-zA-Z0-9_-]+\/exec$/.test(url);
+  const readFixed = () => PayrollSync.fixedBackup(
+    state.fixedPayrollSync ?? JSON.parse(localStorage.getItem(fixedKey) || '{"employee":null,"months":{}}'),
+    state.employees
+  );
+  const validatePrior = validateBackup;
+  validateBackup = function(backup) {
+    validatePrior(backup);
+    if (backup.fixedPayrollSync !== undefined) {
+      backup.fixedPayrollSync = PayrollSync.fixedBackup(backup.fixedPayrollSync,backup.employees);
+    }
+    return backup;
+  };
+  // Older backups have no fixed-pay section. Preserve the records on this device when restoring one.
+  window.getFixedPayrollBackup = readFixed;
   const report = message => { result.textContent = message; };
   const fieldNames = {base:'基本給',tax:'所得税',ei:'雇用保険',housing:'住宅料金',utilities:'水道光熱費',gross:'支給総額',deductionTotal:'控除総額',net:'差引支給額'};
   let targetMonth;
-  function render() {
+  function render(selectedId = state.selected) {
     const fixed = readFixed();
     const list = $('#payrollSyncEmployees');
     list.replaceChildren();
@@ -24,12 +40,12 @@
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       const ready = Boolean(snapshot || entry.fixed);
-      checkbox.checked = ready;
+      checkbox.checked = ready && person.id === selectedId;
       checkbox.disabled = !ready;
       if (ready) checkbox.dataset.syncId = person.id;
       const amount = snapshot?.net ?? entry.fixed?.net;
       const status = ready ? '確定 / 差引 '+yen(amount) : registered ? '未確定' : '当月給与未登録';
-      item.append(checkbox, ' '+person.name+'（'+person.id+'） '+status);
+      item.append(checkbox, ' '+person.name+' '+status);
       list.append(item,document.createElement('br'));
     }
     for (let i = entries.length; i < 4; i++) {
@@ -54,12 +70,25 @@
       const dates = PayrollSync.period(targetMonth);
       $('#payrollSyncPeriod').textContent = targetMonth+'給与（'+dates.start+'〜'+dates.end+'）';
       endpoint.value = localStorage.getItem(prefsKey) || '';
-      report('');
+      settings.open = !validEndpoint(endpoint.value);
+      sendButton.hidden = settings.open;
+      $('#payrollSyncFixed').open = false;
+      report(settings.open ? '初回のみ、Googleの接続先を登録してください。' : '確定給与を選択してください。');
       render();
       dialog.showModal();
     } catch (error) { payStatus(error.message); }
   };
-  $('#saveFixedSync').onclick = () => {
+  $('#savePayrollSyncEndpoint').onclick = () => {
+    try {
+      const url = endpoint.value.trim();
+      if (!validEndpoint(url)) throw Error('所有者専用の Apps Script ウェブアプリURLを入力してください');
+      localStorage.setItem(prefsKey,url);
+      settings.open = false;
+      sendButton.hidden = false;
+      report('接続先を登録しました。確定給与を選択してください。');
+    } catch (error) { report(error.message); }
+  };
+  $('#saveFixedSync').onclick = async () => {
     try {
       const fixed = readFixed();
       const name = $('#fixedSyncName').value.trim();
@@ -92,18 +121,32 @@
         finalizedAt:new Date().toISOString(),status:'確定'
       });
       fixed.months[targetMonth] = row;
-      localStorage.setItem(fixedKey,JSON.stringify(fixed));
-      render();
+      const stateAtSave = state;
+      const next = PayrollSync.fixedBackup(fixed,state.employees);
+      const button = $('#saveFixedSync');
+      button.disabled = true;
+      try {
+        state.fixedPayrollSync = next;
+        await save();
+        const stored = await new Promise((resolve,reject) => {
+          const request = db.transaction('data').objectStore('data').get('state');
+          request.onsuccess = () => resolve(request.result?.fixedPayrollSync);
+          request.onerror = () => reject(request.error);
+        });
+        if (state !== stateAtSave || JSON.stringify(stored) !== JSON.stringify(next)) {
+          throw Error('固定給の保存を確認できません。バックアップを書き出してください。');
+        }
+      } finally { button.disabled = false; }
+      render(next.employee.id);
       report('固定給の確定額をこの端末に保存しました。');
     } catch (error) { report(error.message); }
   };
   $('#sendPayrollSync').onclick = () => {
     try {
       if (salaryMonth() !== targetMonth) throw Error('給与対象月が変更されました。画面を開き直してください');
-      const url = endpoint.value.trim();
-      if (!/^https:\/\/script\.google\.com\/(?:a\/macros\/[a-zA-Z0-9.-]+|macros)\/s\/[a-zA-Z0-9_-]+\/exec$/.test(url)) {
-        throw Error('設定欄に自分専用の Apps Script ウェブアプリURLを入力してください');
-      }
+      const url = localStorage.getItem(prefsKey) || '';
+      if (!validEndpoint(url)) throw Error('Google接続先を登録してください');
+      if (navigator.onLine === false) throw Error('オフラインです。接続後にもう一度送信してください');
       const fixed = readFixed();
       const rows = [...dialog.querySelectorAll('[data-sync-id]:checked')].map(input => {
         const id = input.dataset.syncId;
@@ -117,7 +160,6 @@
       if (!rows.length || rows.length > 4) throw Error('同期する確定給与を1〜4人選択してください');
       const payload = JSON.stringify(rows);
       if (payload.length > 150000) throw Error('明細が多いため、従業員を分けて送信してください');
-      localStorage.setItem(prefsKey,url);
       const form = document.createElement('form');
       form.method = 'POST';
       form.action = url;
@@ -130,7 +172,7 @@
       form.append(data);
       document.body.append(form);
       try { form.submit(); } finally { form.remove(); }
-      report('Googleの確認画面で「同期を確定」を押してください。ログイン画面が開いた場合は、ログイン後にここから再送信してください。');
+      report('同期結果はGoogle画面に表示されます。ログイン画面が開いた場合は、ログイン後に再送してください。');
     } catch (error) { report(error.message); }
   };
 })();

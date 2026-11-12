@@ -39,7 +39,7 @@ const PayrollSync = (() => {
     const count = value => value === null || (typeof value === 'number' && value >= 0 && value <= 31 && Number.isInteger(value * 2));
     const money = value => Number.isSafeInteger(value) && Math.abs(value) <= 1000000000000;
     const date = value => typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(value) && Number.isFinite(Date.parse(value));
-    if (!/^[a-zA-Z0-9_-]{1,100}$/.test(row.id) || !str(row.name,120) ||
+    if (typeof row.id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(row.id) || !str(row.name,120) ||
         !Object.prototype.hasOwnProperty.call(modes,row.mode) || row.status !== '確定' || !date(row.finalizedAt) ||
         !count(row.normalDays) || !count(row.specialDays) ||
         !(row.minutes === null || Number.isSafeInteger(row.minutes) && row.minutes >= 0 && row.minutes <= 44640) ||
@@ -64,6 +64,22 @@ const PayrollSync = (() => {
       refund:row.refund,finalizedAt:row.finalizedAt,status:row.status
     };
   }
+  function fixedBackup(value, employees) {
+    const invalid = () => { throw Error('固定給のバックアップデータを確認してください'); };
+    const object = value => value && typeof value === 'object' && !Array.isArray(value);
+    if (!object(value) || !object(value.months)) return invalid();
+    const person = value.employee;
+    const months = Object.entries(value.months);
+    if (person === null && !months.length) return {employee:null,months:{}};
+    if (!object(person) || typeof person.id !== 'string' || !/^[a-f0-9-]{32,36}$/.test(person.id) ||
+        typeof person.name !== 'string' || !person.name.trim() || person.name.length > 120 ||
+        employees.some(employee => employee.id === person.id)) return invalid();
+    const entries = months.map(([month,row]) => {
+      if (!object(row) || row.id !== person.id || row.month !== month || row.mode !== 'fixed') return invalid();
+      return [month,normalize(row)];
+    });
+    return {employee:{id:person.id,name:person.name},months:Object.fromEntries(entries)};
+  }
   function values(row, at, revision, hash) {
     const p = period(row.month);
     const [year, month] = row.month.split('-').map(Number);
@@ -86,6 +102,6 @@ const PayrollSync = (() => {
     if ((current?.revision ?? null) !== expected) return 'conflict';
     return current ? 'update' : 'insert';
   }
-  return {headers,period,fromSnapshot,normalize,values,plan};
+  return {headers,period,fromSnapshot,normalize,fixedBackup,values,plan};
 })();
 if (typeof module !== 'undefined') module.exports = PayrollSync;

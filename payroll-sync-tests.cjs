@@ -7,7 +7,7 @@ const Sync = require('./payroll-sync-core');
 const sheetData = [[Sync.headers],[['履歴記録日時',...Sync.headers]]];
 const names = ['確定給与','更新履歴'];
 const cache = new Map();
-let failWrite = false, user = 'owner@example.test', writes = 0;
+let failWrite = false, failReadback = false, user = 'owner@example.test', writes = 0;
 const fakeSheet = id => ({
   getLastRow:() => sheetData[id].length,
   getSheetId:() => id,
@@ -26,12 +26,19 @@ const context = vm.createContext({
   CacheService:{getScriptCache:() => ({put:cache.set.bind(cache),get:cache.get.bind(cache),remove:cache.delete.bind(cache)})},
   LockService:{getScriptLock:() => ({waitLock(){},releaseLock(){}})},
   HtmlService:{
-    createTemplateFromFile:() => ({evaluate(){return {setTitle:() => this};}}),
+    createTemplateFromFile:() => ({evaluate(){return {setTitle:() => ({addMetaTag:() => this})};}}),
     createHtmlOutput:text => ({error:text})
   },
-  Sheets:{Spreadsheets:{batchUpdate:({requests}) => {
+  Sheets:{Spreadsheets:{Values:{get:() => {
+    if (failReadback === 'pending') {
+      failReadback = false;
+      throw Error('simulated failure after write');
+    }
+    return {values:sheetData[0].slice(1)};
+  }},batchUpdate:({requests}) => {
     if (failWrite) throw Error('simulated network failure');
     writes++;
+    if (failReadback) failReadback = 'pending';
     for (const request of requests) {
       const operation = request.appendCells || request.updateCells;
       const rows = operation.rows.map(row => row.values.map(({userEnteredValue:v}) => v?.numberValue ?? v?.stringValue ?? ''));
@@ -87,6 +94,26 @@ assert.throws(() => commit(stale),/更新されました/);
 assert.equal(send([{...revised,finalizedAt:'2027-01-16T00:00:00.000Z'}]).unchanged,1);
 assert.equal(send([{...daily,month:'2026-12'}]).changed,1);
 assert.equal(JSON.stringify(snapshot),stored);
+const retry = confirm([{...daily,month:'2027-02'}]);
+failReadback = true;
+assert.throws(() => commit(retry),/failure after write/);
+const writesAfterTimeout = writes;
+assert.equal(commit(retry).unchanged,1);
+assert.equal(writes,writesAfterTimeout);
+const entry = sheetData[0].find(row => row[0] === '2027-02:worker-a');
+entry[22]++;
+assert.throws(() => commit(retry),/一致しません/);
+entry[22]--;
+
+const fixedId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const january = {...rows[3],id:fixedId,name:'登録時の氏名'};
+const fixedBackup = {
+  employee:{id:fixedId,name:'変更後の氏名'},months:{'2027-01':january,'2027-02':{...january,month:'2027-02'}}
+};
+assert.deepEqual(Sync.fixedBackup(JSON.parse(JSON.stringify(fixedBackup)),[]),fixedBackup);
+assert.throws(() => Sync.fixedBackup(fixedBackup,[{id:fixedId}]),/バックアップ/);
+assert.throws(() => Sync.fixedBackup({...fixedBackup,months:{'2027-03':january}},[]),/バックアップ/);
+assert.deepEqual(Sync.fixedBackup({employee:null,months:{}},[]),{employee:null,months:{}});
 user = 'other@example.test';
 assert.ok(confirm([daily]).error);
 assert.throws(() => context.commitPayroll(preview.payload,preview.nonce),/所有者/);
