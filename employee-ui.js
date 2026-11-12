@@ -96,7 +96,6 @@
   }
   mode.addEventListener('change',updateFields);
   function openEditor(person = null) {
-    if (manager.open) manager.close();
     editingId = person?.id ?? null;
     $('#editorTitle132').textContent = editingId ? '従業員の編集' : '従業員の登録';
     editorStatus.textContent = '';
@@ -130,7 +129,6 @@
   $('#addEmployee').onclick = $('#newEmployee132').onclick = () => openEditor();
   $('#editEmployeePay08').onclick = () => openEditor(employee());
   $('#closeEditor132').onclick = () => editor.close();
-  $('#closeManager132').onclick = () => manager.close();
   $('#saveEmployee08').onclick = async event => {
     const button = event.currentTarget;
     button.disabled = true;
@@ -250,7 +248,7 @@
     state.selected = person.id;
     state.salaryMonth = months.sort().at(-1) ?? currentMonth();
     $('#salaryMonth').value = state.salaryMonth;
-    manager.close();
+    window.showTimeLabPage14('work', {archive: true});
     render();
     $('#archiveStatus132').focus();
   }
@@ -287,9 +285,7 @@
     if (!purgeRun.hidden && purgeCheck.checked) changeEmployee(purgeId,'purge');
   };
   $('#purgeCancel133').onclick = () => { if (!savingEmployee) purgeDialog.close(); };
-  for (const dialog of [purgeDialog,manager]) {
-    dialog.addEventListener('cancel',event=>{ if (savingEmployee) event.preventDefault(); });
-  }
+  purgeDialog.addEventListener('cancel',event=>{ if (savingEmployee) event.preventDefault(); });
 
   async function changeEmployee(id,operation) {
     if (savingEmployee) return;
@@ -350,10 +346,10 @@
     managerStatus.textContent = '';
     updateManager();
     past.open = showPast;
-    manager.showModal();
   }
-  $('#manageEmployees132').onclick = () => openManager(Boolean(archiveView));
-  const historyBack = action('過去の従業員に戻る',()=>openManager(true));
+  window.openEmployeePage14 = openManager;
+  window.closeArchiveView14 = closeArchiveView;
+  const historyBack = action('過去の従業員に戻る',()=>window.showTimeLabPage14('employeeManager132',{past:true}));
   historyBack.hidden = true;
   $('#archiveStatus132').after(historyBack);
   $('#archiveStatus132').tabIndex = -1;
@@ -473,7 +469,6 @@
     const empty = !active;
     employeeMonth.classList.toggle('viewing-archive133',archived);
     $('#employee').closest('label').hidden = empty || archived;
-    $('#manageEmployees132').hidden = archived;
     historyBack.hidden = !archived;
     legacyAttendanceSettings.hidden = empty || archived;
     $('#salaryMonth').closest('label').hidden = empty;
@@ -484,10 +479,12 @@
     }
     if (empty) {
       $('#archiveStatus132').hidden = true;
+      if (!manager.hidden) updateManager();
       return;
     }
     if (state.selected!==active.id) state.selected=active.id;
     previousRender();
+    if (!manager.hidden) updateManager();
   };
   if (state) render();
 })();

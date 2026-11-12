@@ -51,21 +51,21 @@ function showExportFile(file, label, preview) {
   $('#payrollExportActions').append(exportButton(label + 'を書き出す', () => download(file.name, file, file.type)));
 }
 
-async function openPayrollExport(forCompany) {
-  if (!state || !payPeriod()) {
+async function openPayrollExport(forCompany, historical = null) {
+  if (!state || (!historical && !payPeriod())) {
     $('#payrollExportNotice').textContent = '給与を作成してから出力してください。';
     return;
   }
   const run = ++exportRun;
-  const key = payKey();
-  const current = () => run === exportRun && exportDialog.open && payKey() === key;
+  const key = historical ? null : payKey();
+  const current = () => run === exportRun && exportDialog.open && (historical || payKey() === key);
   const payrollState = $('#payrollExportState');
   const photoStatus = $('#payrollExportPhotos');
   const zipActions = $('#payrollExportZip');
   const fallback = forCompany ?
     'まとめて共有できない場合は「その他の操作」からZIPをお使いください。' :
     'まとめて共有できない場合は「その他の操作」からファイルを書き出し、手動で添付してください。';
-  $('#payrollExportTitle').textContent = forCompany ? '管理会社へ送る' : 'パソコンへ送る';
+  $('#payrollExportTitle').textContent = historical ? '確定明細を再出力' : forCompany ? '管理会社へ送る' : 'パソコンへ送る';
   $('#payrollExportNotice').textContent = '';
   $('#payrollExportFiles').replaceChildren();
   $('#payrollExportActions').replaceChildren();
@@ -78,14 +78,16 @@ async function openPayrollExport(forCompany) {
   exportSend.onclick = null;
   exportSend.textContent = forCompany ? 'この内容で送る' : 'PDFとExcelを送る';
   exportStatus.textContent = '添付ファイルを準備しています…';
-  $('#payrollExportContext').textContent = employee().name + ' / ' + salaryMonth();
+  $('#payrollExportContext').textContent = historical ? historical.name+' / '+historical.month : employee().name+' / '+salaryMonth();
   exportDialog.showModal();
 
   try {
     await saveQueue;
     if (!current()) return;
-    const period = PeriodCore.period(salaryMonth());
-    const model = PayrollExport.model(employee().name, period, livePay(), Boolean(payPeriod().snapshot), earningName, hm);
+    const period = PeriodCore.period(historical?.month ?? salaryMonth());
+    const model = historical
+      ? PayrollExport.model(historical.name, period, historical.snapshot, true, earningName, hm)
+      : PayrollExport.model(employee().name, period, livePay(), Boolean(payPeriod().snapshot), earningName, hm);
     payrollState.textContent = model.status;
     const pdf = await PayrollExport.pdf(model);
     if (!current()) return;
