@@ -1,7 +1,15 @@
 'use strict';
 function payStore(){return state.payrollV07||{profiles:{},periods:{},taxTables:{}}}
 function payKey(){return employee().id+':'+salaryMonth()}
-function payPeriod(){return payStore().periods?.[payKey()]}
+function payPeriod(){
+  const person = employee();
+  if (!person) return undefined;
+  const period = payStore().periods?.[payKey()];
+  if (person.archivedAt132 && period && !period.snapshot && period.revisions.length) {
+    return {...period,snapshot:period.revisions.at(-1)};
+  }
+  return period ?? window.legacyFixedPeriod132?.(person.id,salaryMonth());
+}
 function taxFor(year){return (+year===2026?Tax2026:payStore().taxTables?.[year])||null}
 function livePay(){let period=payPeriod();if(!period)return null;if(period.snapshot)return period.snapshot;const {summary,opt,rows}=salaryView();if(typeof employeePlan==='function'){const plan=employeePlan(),copy=structuredClone(period);if(employeeHistory().length){const item=copy.earnings.find(i=>i.id==='special');if(item)item.amount=plan.specialSalary}return PayrollCore.calculate(copy,plan.summary,{...opt,mode:plan.mode,rate:plan.rate},taxFor(period.settings.taxYear),rows,plan)}return PayrollCore.calculate(period.special?period:{...period,special:PayrollCore.specialDefaults(employee().name)},summary,opt,taxFor(period.settings.taxYear),rows)}
 function earningName(i){return i.source==='specialAttendance'||i.id==='saturday'||i.name==='特別出勤手当'||i.name==='土曜出勤手当'?'土曜出勤手当':i.name}

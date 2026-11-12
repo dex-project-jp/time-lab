@@ -25,9 +25,9 @@ const PayrollSync = (() => {
     });
     return {
       month, id:employee.id, name:employee.name, mode:snapshot.options?.mode,
-      normalDays:snapshot.dayPay?.regularDays ?? (snapshot.options?.mode === 'hourly' && snapshot.special?.count === 0 ? snapshot.summary?.days : null) ?? null,
-      specialDays:snapshot.dayPay?.saturdayDays ?? snapshot.special?.count ?? null,
-      minutes:snapshot.summary?.minutes ?? null,
+      normalDays:snapshot.options?.mode==='fixed' ? null : snapshot.dayPay?.regularDays ?? (snapshot.options?.mode === 'hourly' && snapshot.special?.count === 0 ? snapshot.summary?.days : null) ?? null,
+      specialDays:snapshot.options?.mode==='fixed' ? null : snapshot.dayPay?.saturdayDays ?? snapshot.special?.count ?? null,
+      minutes:snapshot.options?.mode==='fixed' ? null : snapshot.summary?.minutes ?? null,
       earnings:items(snapshot.earnings,'earnings'), deductions:items(snapshot.deductions,'deductions'),
       gross:snapshot.gross, deductionTotal:snapshot.deductionTotal, net:snapshot.net,
       refund:snapshot.taxRefund ?? null, finalizedAt:snapshot.at, status:'確定'

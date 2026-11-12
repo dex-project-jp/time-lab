@@ -14,7 +14,7 @@ const PayrollExport = (() => {
     const amount = value => Number.isFinite(value) ? value : '要確認';
     const items = rows => rows.filter(row => row.amount !== 0).map(row => [itemName(row), amount(row.amount)]);
     const {summary, dayPay} = result;
-    const attendance = [
+    const attendance = result.options?.mode === 'fixed' ? [] : [
       ['出勤日数', dayPay?.totalDays ?? summary.days, '日'],
       ...(dayPay ? [['通常出勤日数', dayPay.regularDays, '日'], ['土曜出勤日数', dayPay.saturdayDays, '日']] : []),
       ['実働時間', time(summary.minutes)],

@@ -15,9 +15,17 @@ livePay = function () {
   const period = payPeriod();
   if (!period || period.snapshot) return priorLivePay09();
   const plan = employeePlan();
+  if (plan.mode === 'fixed' && period.fixedBase132 != null) plan.base = period.fixedBase132;
   const rows = PeriodCore.rows(state, employee().id, salaryMonth());
   const profile = payStore().extraProfiles09?.[employee().id]?.deductionSettings10;
-  const draft = {...period,settings:PayrollCore.deductionSettings12(period.settings,profile ?? {})};
+  let earnings = period.earnings;
+  if (plan.mode === 'fixed') {
+    const base = earnings.find(item => item.id === 'base') ?? earnings.find(item => item.source === 'attendance');
+    earnings = earnings.map(item => item === base ? {...item,source:'attendance'}
+      : item.source === 'attendance' ? {...item,source:'manual'} : item);
+    if (!base) earnings.push({id:'base',name:'基本給',kind:'salary',source:'attendance',amount:0,eiBase:true});
+  }
+  const draft = {...period,earnings,settings:PayrollCore.deductionSettings12(period.settings,profile ?? {})};
   return PayrollExtras.calculate(draft, extrasFor09(period), plan, rows, taxFor(period.settings.taxYear),
     employeeHistory().length ? plan.specialSalary : undefined, true);
 };
@@ -26,7 +34,7 @@ payRows = function (side, period, result) {
   if (period.snapshot) return priorPayRows09(side, period, result);
   const extras = extrasFor09(period);
   const hiddenKeys = side === 'earnings'
-    ? [...(extras.special.formula ? ['special'] : []), ...(extras.leave.touched ? ['leave'] : [])]
+    ? [...(employeePlan().mode==='fixed' ? ['base','saturday'] : []), ...(extras.special.formula ? ['special'] : []), ...(extras.leave.touched ? ['leave'] : [])]
     : ['housing','utilities'];
   const hidden = new Set(hiddenKeys.map(key => PayrollExtras.find(period[side],key)?.id).filter(Boolean));
   return priorPayRows09(side, {...period,[side]:period[side].filter(item => !hidden.has(item.id))}, result);

@@ -115,3 +115,28 @@ input, select, textarea {
 .payroll-export-footer {border-top: 1px solid #494335;}
 #payrollExportStatus {margin: 0 0 .45rem; font-size: .9rem;}
 #payrollExportSend {width: 100%;}
+
+/* Employee setup and the monthly payroll flow. */
+#employeeEditor132,#employeeManager132,#payrollSyncDialog{max-width:540px}
+#employeeSettings08>summary,#employeeSettings08>p{display:none}
+#employeeSettings08{margin:0;padding:0;border:0}
+#employeeSettings08 .form-grid{margin:0 0 14px}
+#employeeList132 section{padding:12px 0;border-bottom:1px solid var(--border)}
+#employeeList132 h3,#employeeList132 p{margin:0 0 5px}
+#employeeList132 .actions{margin:8px 0}
+#managerStatus132,#editorStatus132,#payrollSyncStatus{color:var(--gold)}
+.sync-person132{display:flex;align-items:center;gap:10px;min-height:52px;padding:8px 0;border-bottom:1px solid var(--border)}
+.sync-person132>span{min-width:0;overflow-wrap:anywhere}
+.sync-person132 strong{display:block;font-size:.87rem;color:var(--gold)}
+.sync-person132:has(input:disabled){opacity:.7}
+#outputActions132,#pay07Issues+.actions{margin:12px 0}
+#payrollSyncDialog button,#employeeEditor132 button,#employeeManager132 button,#outputActions132 button{min-height:44px}
+#payrollSyncPeriod{font-size:.94rem}
+#currentFixed132{max-width:260px;margin:12px 0}
+@media(max-width:440px){
+  #employeeMonth132{grid-template-columns:minmax(0,1fr) auto}
+  #employeeMonth132 label:last-child{grid-column:1/-1}
+  #employeeEditor132 .form-grid{grid-template-columns:minmax(0,1fr)}
+  #outputActions132{display:grid;grid-template-columns:minmax(0,1fr)}
+  #outputActions132[hidden]{display:none}
+}
