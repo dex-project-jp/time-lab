@@ -86,6 +86,15 @@
     if (!matches.length) historyRecords.textContent = entries.length?'条件に合う確定給与はありません。':'確定済みの給与はまだありません。';
   }
 
+  const taxImport = $('#importTaxTable');
+  const importTaxTable = taxImport.onchange;
+  taxImport.onchange = async event => {
+    const result = $('#pay07Status');
+    result.textContent = '';
+    await importTaxTable(event);
+    $('#taxTableStatus14').textContent = result.textContent;
+  };
+
   historyMonth.onchange = historyEmployee.onchange = renderHistory;
   window.showTimeLabPage14 = (page,{archive=false,past=false}={}) => {
     if (!archive) window.closeArchiveView14();
