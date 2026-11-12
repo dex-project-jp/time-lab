@@ -254,21 +254,28 @@
   baseField.innerHTML = '今月の基本給（円）<input id="fixedBase132" type="number" inputmode="numeric" min="0" max="1000000000" step="1">';
   $('#dayPaySummary').after(baseField);
   const baseInput = $('#fixedBase132');
-  baseInput.onchange = async () => {
+  function updateFixedBase() {
     const period = payPeriod();
-    if (!period || period.snapshot || employee().archivedAt132) return;
+    if (!period || period.snapshot || employee().archivedAt132 || !baseInput.checkValidity()) return;
+    if (baseInput.value === '') delete period.fixedBase132;
+    else period.fixedBase132 = PayrollCore.money(baseInput.value,'今月の基本給');
+    renderPay07(true);
+  }
+  baseInput.oninput = updateFixedBase;
+  baseInput.onchange = async () => {
+    if (!baseInput.checkValidity()) return;
     try {
-      if (!baseInput.checkValidity()) throw Error('今月の基本給を確認してください。');
-      if (baseInput.value==='') delete period.fixedBase132;
-      else period.fixedBase132 = PayrollCore.money(baseInput.value,'今月の基本給');
-      renderPay07();
+      updateFixedBase();
       await persistPay();
     } catch (error) { payStatus(error.message); }
   };
 
   const freeze = $('#freezePay07').onclick;
   $('#freezePay07').onclick = async () => {
-    if (!baseField.hidden && !baseInput.reportValidity()) return;
+    if (!baseField.hidden) {
+      if (!baseInput.reportValidity()) return;
+      updateFixedBase();
+    }
     await freeze();
     if (payPeriod()?.snapshot) $('#outputActions132').scrollIntoView({block:'nearest'});
   };

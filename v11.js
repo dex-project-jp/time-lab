@@ -93,6 +93,7 @@ $('#pay07Deductions').addEventListener('click', event => {
 });
 const settingsLink11 = document.createElement('button');
 settingsLink11.type = 'button';
+settingsLink11.hidden = true;
 settingsLink11.className = 'secondary';
 settingsLink11.textContent = '税・雇用保険・住宅料金・水道光熱費を編集';
 settingsLink11.onclick = () => {
