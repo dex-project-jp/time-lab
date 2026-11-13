@@ -199,10 +199,57 @@
   let purgeId = null;
   let savingEmployee = false;
   let archiveView = null;
+  let reordering = false;
+  const reorderButton = $('#reorderEmployees142');
+  reorderButton.onclick = () => {
+    reordering = !reordering;
+    managerStatus.textContent = '';
+    updateManager();
+  };
+
+  async function moveEmployee(id,direction) {
+    if (savingEmployee) return;
+    const previous = state.employees;
+    const active = previous.filter(person=>!person.archivedAt132);
+    const position = active.findIndex(person=>person.id===id);
+    const neighbor = active[position+direction];
+    if (position<0 || !neighbor) return;
+
+    const from = previous.indexOf(active[position]);
+    const to = previous.indexOf(neighbor);
+    const next = previous.slice();
+    [next[from],next[to]] = [next[to],next[from]];
+    savingEmployee = true;
+    document.body.inert = true;
+    state.employees = next;
+    try {
+      updateManager();
+      await persistState();
+    } catch {
+      state.employees = previous;
+      updateManager();
+      managerStatus.textContent = '並び順を保存できませんでした。もう一度お試しください。';
+      return;
+    } finally {
+      savingEmployee = false;
+      document.body.inert = false;
+    }
+
+    render();
+    const row = $('#employeeList132').children[position+direction];
+    const movedButton = row.querySelector(direction<0 ? '[data-move-up]' : '[data-move-down]');
+    (movedButton.disabled ? row.querySelector('button:not(:disabled)') : movedButton)?.focus({preventScroll:true});
+    managerStatus.textContent = '並び順を保存しました。';
+  }
 
   function updateManager() {
     const currentList = $('#employeeList132');
     const pastList = $('#pastList133');
+    const active = state.employees.filter(person=>!person.archivedAt132);
+    reorderButton.hidden = active.length<2;
+    if (reorderButton.hidden) reordering = false;
+    reorderButton.textContent = reordering ? '完了' : '並べ替え';
+    reorderButton.setAttribute('aria-pressed',String(reordering));
     currentList.replaceChildren();
     pastList.replaceChildren();
     for (const person of state.employees) {
@@ -223,6 +270,18 @@
         const item = document.createElement('section');
         const name = document.createElement('h4');
         name.textContent = person.name;
+        if (reordering) {
+          const position = active.indexOf(person);
+          const up = action('↑ 上へ',()=>moveEmployee(person.id,-1));
+          const down = action('↓ 下へ',()=>moveEmployee(person.id,1));
+          up.setAttribute('data-move-up','');
+          down.setAttribute('data-move-down','');
+          up.setAttribute('aria-label',person.name+'を上へ移動');
+          down.setAttribute('aria-label',person.name+'を下へ移動');
+          up.disabled = position===0;
+          down.disabled = position===active.length-1;
+          buttons.append(up,down);
+        }
         buttons.append(action('編集',()=>openEditor(person)),action('削除',()=>{
           if (confirm(person.name+'さんを「過去の従業員」に移しますか？ 設定・勤怠・給与履歴は保持されます。')) {
             changeEmployee(person.id,'archive');
@@ -344,6 +403,7 @@
   function openManager(showPast = false) {
     if (!state || savingEmployee) return;
     closeArchiveView();
+    reordering = false;
     managerStatus.textContent = '';
     updateManager();
     past.open = showPast;

@@ -213,3 +213,7 @@ dialog{max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-
 .photo-removal-list li{display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin:.4rem 0}
 .photo-removal-list span{min-width:0;overflow-wrap:anywhere}
 .photo-removal-list button{flex-shrink:0}
+
+#employeeManager132 .list-heading{flex-wrap:wrap}
+#employeeList132 .actions{display:flex;flex-wrap:wrap}
+#employeeList132 .actions button,#reorderEmployees142{min-height:44px;min-width:44px}
