@@ -24,6 +24,39 @@ function defaults(period, profile = {}, mode, fresh = false) {
   };
 }
 
+const housingKeys = ['housing','utilities'];
+
+function standardDeduction(store, employeeId, key) {
+  const profile = store.extraProfiles09?.[employeeId];
+  if (profile?.[key]) return profile[key];
+  const items = profile?.deductionItems11 ?? {};
+  const template = store.profiles?.[employeeId]?.deductions ?? [];
+  const old = find(Object.values(items).filter(Boolean), key) ??
+    find(template.filter(item => item.recurring && items[item.id] !== null), key);
+  if (old?.calc !== 'manual') return undefined;
+  return {
+    amount:old.amount, enabled:old.enabled !== false && old.amount > 0,
+    reason:(old.reason ?? '').slice(0,200), confirmed:false
+  };
+}
+
+function withStandard(saved) {
+  return {amount:0,enabled:false,reason:'',confirmed:false,...saved,useStandard:true};
+}
+
+function periodExtras(period, store, employeeId, mode, fresh = false) {
+  const profile = store.extraProfiles09?.[employeeId];
+  const stored = period.extras09;
+  const extras = {...(stored ?? defaults(period,profile,mode,fresh))};
+  for (const key of housingKeys) {
+    const entry = extras[key];
+    if (entry.useStandard === true || (!stored && (fresh || !find(period.deductions,key)))) {
+      extras[key] = withStandard(standardDeduction(store,employeeId,key));
+    }
+  }
+  return extras;
+}
+
 function calculate(period, extras, plan, rows, table, legacySpecial, simple = false) {
   const effective = structuredClone(period);
   const issues = [];
@@ -193,8 +226,12 @@ function validateStore(store, employees) {
     money(extras.special.a);
     money(extras.special.b);
     if (extras.special.n !== null) money(extras.special.n);
-    deduction(extras.housing);
-    deduction(extras.utilities);
+    for (const key of housingKeys) {
+      deduction(extras[key]);
+      if (extras[key].useStandard !== undefined && typeof extras[key].useStandard !== 'boolean') {
+        throw Error('月別の住宅・光熱費設定が不正です');
+      }
+    }
   };
   for (const period of Object.values(store.periods || {})) {
     check(period.extras09);
@@ -203,6 +240,6 @@ function validateStore(store, employees) {
   }
 }
 
-root.PayrollExtras = {labels, find, defaults, calculate, calculateLeave, validateStore};
+root.PayrollExtras = {labels, find, defaults, housingKeys, standardDeduction, periodExtras, calculate, calculateLeave, validateStore};
 if (typeof module !== 'undefined') module.exports = root.PayrollExtras;
 })(typeof window !== 'undefined' ? window : globalThis);

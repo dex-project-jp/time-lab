@@ -18,6 +18,17 @@
   const advancedTitle = document.createElement('summary');
   advancedTitle.textContent = '従業員の詳細設定';
   advanced.append(advancedTitle,$('#employeeResidency16').closest('.form-grid'),vaultPanel09,legacySpecialSettings09,$('#empHistory08').closest('details'));
+  const housingSettings = document.createElement('fieldset');
+  housingSettings.className = 'housing-deductions';
+  housingSettings.innerHTML = `
+    <legend>住宅・水道光熱費設定</legend>
+    <div class="form-grid">${PayrollExtras.housingKeys.map(key => `
+      <label>${key === 'housing' ? '家賃' : '水道光熱費'}（月額・円）
+        <input type="number" inputmode="numeric" min="0" max="1000000000" step="1"
+          placeholder="未設定" data-standard-deduction="${key}">
+      </label>`).join('')}</div>`;
+  const housingInputs = [...housingSettings.querySelectorAll('input')];
+  settings.append(housingSettings);
   settings.append(advanced);
   const saveButton = $('#saveEmployee08');
   $('#closeEditor132').before(saveButton);
@@ -119,6 +130,11 @@
       $('#empLegalConfirmed08').checked = false;
       $('#empLegalKind08').value = 'contract';
     }
+    for (const input of housingInputs) {
+      const standard = person && PayrollExtras.standardDeduction(payStore(),person.id,input.dataset.standardDeduction);
+      input.value = standard ? (standard.enabled ? standard.amount : 0) : '';
+      input.defaultValue = input.value;
+    }
     special.open = false;
     advanced.hidden = !editingId;
     advanced.open = false;
@@ -167,11 +183,24 @@
       if (existing && conditionFor(existing).mode!==method && !from.endsWith('-16')) {
         throw Error('給与方式を変更する場合は、適用開始日を16日にしてください。');
       }
+      const standardAmounts = housingInputs.flatMap(input => {
+        if (!input.checkValidity()) throw Error('家賃・水道光熱費は0〜10億円の整数で入力してください。');
+        if (input.value === input.defaultValue) return [];
+        return [[input.dataset.standardDeduction,PayrollCore.money(input.value || 0)]];
+      });
       const conditions = existing ? EmployeeCore.put(historyFor(existing),next,fallbackFor(existing)) : [next];
       const person = existing || {id:uid(),name,mode:method==='hourly'?'hourly':'daily',rate};
       person.name = name;
       if (!existing) state.employees.push(person);
       (payrollStore().employeeConditions ||= {})[person.id] = conditions;
+      if (standardAmounts.length) {
+        const profiles = payrollStore().extraProfiles09 ??= {};
+        const profile = profiles[person.id] ??= {};
+        for (const [key,amount] of standardAmounts) {
+          const previous = PayrollExtras.standardDeduction(payStore(),person.id,key);
+          profile[key] = {reason:'',confirmed:false,...previous,amount,enabled:amount > 0};
+        }
+      }
       state.selected = person.id;
       await persistPay();
       editor.close();

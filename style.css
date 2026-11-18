@@ -217,3 +217,21 @@ dialog{max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-
 #employeeManager132 .list-heading{flex-wrap:wrap}
 #employeeList132 .actions{display:flex;flex-wrap:wrap}
 #employeeList132 .actions button,#reorderEmployees142{min-height:44px;min-width:44px}
+
+#employeeMonth132 > label,.form-grid > label,.time-grid > label{min-width:0}
+input:is([type=month],[type=date],[type=time]){
+  display:block;
+  box-sizing:border-box;
+  width:100%;
+  min-width:0;
+  max-width:100%;
+}
+input:is([type=month],[type=date],[type=time])::-webkit-date-and-time-value{
+  min-width:0;
+  min-height:1.5em;
+  margin:0;
+  text-align:start;
+}
+.housing-deductions{min-inline-size:0;margin:14px 0}
+.housing-deductions small{display:block;color:var(--muted)}
+#housingDeductionStatus:empty{display:none}

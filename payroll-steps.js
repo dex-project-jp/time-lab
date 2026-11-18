@@ -83,7 +83,7 @@
   salaryPanel.dataset.stepPanel = '3';
   const review = document.createElement('div');
   review.id = 'stepReviewSummary';
-  $('#pay07Totals').after(review);
+  $('#pay07Totals').after(review,deductionPanel09);
   const payStatusNode = $('#pay07Status');
   const issues = $('#pay07Issues');
   const confirm = panel(4,'給与確定');

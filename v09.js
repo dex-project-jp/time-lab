@@ -3,12 +3,10 @@
 const priorLivePay09 = livePay;
 const priorPayRows09 = payRows;
 const priorRenderPay09 = renderPay07;
-const priorStartPay09 = $('#startPay07').onclick;
 const priorPrint09 = $('#periodPrint').onclick;
 
 function extrasFor09(period, fresh = false) {
-  const profile = payStore().extraProfiles09?.[employee().id];
-  return period.extras09 ?? PayrollExtras.defaults(period, profile, periodOptions().mode, fresh);
+  return PayrollExtras.periodExtras(period,payStore(),employee().id,periodOptions().mode,fresh);
 }
 
 livePay = function () {
@@ -65,16 +63,17 @@ $('#pay07Earnings').before(extrasPanel09);
 
 const deductionPanel09 = document.createElement('div');
 deductionPanel09.className = 'extras09';
-deductionPanel09.innerHTML = ['housing','utilities'].map(key => `
-  <fieldset><legend>${PayrollExtras.labels[key]}</legend>
-    <label><input type="checkbox" data-extra09="${key}.enabled"> 控除する</label>
-    <label>金額（円） <input type="number" inputmode="numeric" min="0" step="1" data-extra09="${key}.amount"></label>
-    <output data-deduction-status10="${key}"></output>
-    <details><summary>控除の根拠を確認</summary>
-      <label>賃金控除協定などの根拠 <input type="text" maxlength="200" data-extra09="${key}.reason"></label>
-      <label><input type="checkbox" data-extra09="${key}.confirmed"> 適法な控除根拠を確認した</label>
-    </details>
-  </fieldset>`).join('');
+deductionPanel09.innerHTML = `
+  <fieldset class="housing-deductions">
+    <legend>当月の家賃・水道光熱費</legend>
+    <div class="form-grid">${PayrollExtras.housingKeys.map(key => `
+      <label>${key === 'housing' ? '家賃' : '水道光熱費'}（円）
+        <input type="number" inputmode="numeric" min="0" max="1000000000" step="1" data-extra09="${key}.amount">
+        <small data-deduction-status10="${key}"></small>
+      </label>`).join('')}</div>
+    <button type="button" class="secondary" id="resetHousingDeductions">標準金額に戻す</button>
+    <p class="muted" role="status" id="housingDeductionStatus"></p>
+  </fieldset>`;
 $('#pay07Deductions').after(deductionPanel09);
 
 function extraResult09(result, key) {
@@ -104,7 +103,13 @@ renderPay07 = function (keepRows = false) {
     const [key, field] = input.dataset.extra09.split('.');
     const value = extra[key][field];
     if (input.type === 'checkbox') input.checked = !!value;
-    else if (input !== document.activeElement || !keepRows) input.value = value ?? '';
+    else if (input !== document.activeElement || !keepRows) {
+      const hasStandard = !extra[key].useStandard ||
+        !!PayrollExtras.standardDeduction(payStore(),employee().id,key);
+      input.value = PayrollExtras.housingKeys.includes(key)
+        ? (hasStandard ? (extra[key].enabled ? value : 0) : '')
+        : value ?? '';
+    }
     input.disabled = locked || (key === 'leave' && field !== 'enabled' && !extra.leave.enabled) ||
       (key === 'special' && field === 'n' && !extra.special.enabled);
   }
@@ -116,10 +121,11 @@ renderPay07 = function (keepRows = false) {
     const preview = extra.leave.enabled && extra.leave.days !== null ? employeePlan().rate * 8 * extra.leave.days : null;
     $('#leaveAmount09').textContent = leave === null && preview !== null
       ? '参考 ' + yen(preview) + '（取得日と算定方式の確認待ち）' : yen(leave);
-    for (const key of ['housing','utilities']) {
-      const item = PayrollExtras.find(result.deductions,key);
-      document.querySelector('[data-deduction-status10="'+key+'"]').textContent = !extra[key].enabled ? 'OFF · 0円' :
-        yen(item?.amount ?? 0);
+    for (const key of PayrollExtras.housingKeys) {
+      const standard = PayrollExtras.standardDeduction(payStore(),employee().id,key);
+      const label = standard ? '標準 '+yen(standard.enabled ? standard.amount : 0) : '標準未設定';
+      deductionPanel09.querySelector('[data-deduction-status10="'+key+'"]').textContent =
+        extra[key].useStandard ? label : '当月の保存額 ／ '+label;
     }
     if (result.gross === null) $('#pay07Reference').textContent = '支給の入力待ち。税・保険・Excel照合額は支給がそろうと計算します。';
   } catch {
@@ -133,6 +139,8 @@ async function editExtras09(event) {
   if (!input.dataset.extra09 || !period || period.snapshot) return;
   try {
     const [key, field] = input.dataset.extra09.split('.');
+    const monthly = PayrollExtras.housingKeys.includes(key);
+    if (monthly) $('#housingDeductionStatus').textContent = '';
     const previous = period.extras09;
     const extras = structuredClone(extrasFor09(period));
     let value = input.type === 'checkbox' ? input.checked : input.value;
@@ -142,6 +150,10 @@ async function editExtras09(event) {
         field === 'days' ? Number(input.value) : PayrollCore.money(input.value || 0);
     }
     extras[key][field] = value;
+    if (monthly) {
+      extras[key].enabled = value > 0;
+      extras[key].useStandard = input.value === '';
+    }
     if (key === 'special' && ['enabled','n'].includes(field)) extras.special.formula = true;
     if (key === 'leave') {
       extras.leave.touched = true;
@@ -152,13 +164,14 @@ async function editExtras09(event) {
     const profiles = payStore().extraProfiles09 ??= {};
     const profile = profiles[employee().id] ??= {};
     if (key === 'special' && ['a','b'].includes(field)) profile[field] = value;
-    if (['housing','utilities'].includes(key)) profile[key] = {amount:extras[key].amount,enabled:extras[key].enabled,reason:extras[key].reason,confirmed:extras[key].confirmed && !!extras[key].reason.trim()};
     const switchedSpecial = key === 'special' && !previous?.special.formula && extras.special.formula;
     const switchedLeave = key === 'leave' && !previous?.leave.touched;
     renderPay07(!switchedSpecial && !switchedLeave);
-    await persistPay();
+    if (monthly) await persistState();
+    else await persistPay();
   } catch (error) {
-    payStatus(error.message);
+    if (deductionPanel09.contains(input)) $('#housingDeductionStatus').textContent = error.message;
+    else payStatus(error.message);
     $('#freezePay07').disabled = true;
   }
 }
@@ -171,15 +184,19 @@ for (const panel of [extrasPanel09,deductionPanel09]) {
   });
 }
 
-$('#startPay07').onclick = async function () {
-  const key = payKey();
-  const prior = payPeriod();
-  await priorStartPay09();
-  if (!prior && payKey() === key && payPeriod()) {
-    payPeriod().extras09 = extrasFor09(payPeriod(), true);
-    await persistPay();
-    renderPay07();
-  }
+deductionPanel09.addEventListener('focusout', event => {
+  if (event.target.matches('input') && event.target.validity.valid) renderPay07(true);
+});
+$('#resetHousingDeductions').onclick = async () => {
+  const period = payPeriod();
+  if (!period || period.snapshot) return;
+  const extras = structuredClone(extrasFor09(period));
+  $('#housingDeductionStatus').textContent = '';
+  for (const key of PayrollExtras.housingKeys) extras[key].useStandard = true;
+  period.extras09 = extras;
+  renderPay07();
+  try { await persistState(); }
+  catch (error) { $('#housingDeductionStatus').textContent = error.message; }
 };
 
 const vaultPanel09 = document.createElement('details');

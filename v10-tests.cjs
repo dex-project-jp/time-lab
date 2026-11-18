@@ -65,3 +65,38 @@ test('confirmed employee deduction grounds carry forward independently', () => {
   assert.equal(extras.housing.confirmed,true);
   assert.equal(extras.utilities.confirmed,false);
 });
+
+test('monthly housing overrides, including zero, survive reload and leave future months on employee standards', () => {
+  const {period} = example();
+  const store = {extraProfiles09:{staff:{
+    housing:{amount:10000,enabled:true,reason:'',confirmed:false},
+    utilities:{amount:10000,enabled:true,reason:'',confirmed:false}
+  }}};
+  const current = (draft, fresh = false) => Extras.periodExtras(draft,store,'staff','daily',fresh);
+  period.extras09 = current(period,true);
+  assert.deepEqual(Extras.housingKeys.map(key => current(period)[key].amount),[10000,10000]);
+  Object.assign(period.extras09.housing,{amount:5000,useStandard:false});
+  Object.assign(period.extras09.utilities,{amount:0,enabled:false,useStandard:false});
+  const reloaded = JSON.parse(JSON.stringify(period));
+  store.extraProfiles09.staff.housing.amount = 12500;
+  assert.deepEqual(Extras.housingKeys.map(key => current(reloaded)[key].amount),[5000,0]);
+  const next = Payroll.create('2026-12',null,null,'木曜設定');
+  assert.deepEqual(Extras.housingKeys.map(key => current(next,true)[key].amount),[12500,10000]);
+  for (const key of Extras.housingKeys) reloaded.extras09[key].useStandard = true;
+  assert.deepEqual(Extras.housingKeys.map(key => current(reloaded)[key].amount),[12500,10000]);
+});
+
+test('legacy monthly amounts are preserved and unset standards remain unconfigured', () => {
+  const {period,extra} = example();
+  period.extras09 = extra;
+  extra.housing.amount = 5000;
+  const housing = {id:'custom',name:'住宅料金',amount:10000,calc:'manual',recurring:true};
+  const store = {profiles:{staff:{deductions:[housing]}}};
+  assert.equal(Extras.periodExtras(period,store,'staff','daily').housing.amount,5000);
+  const next = Payroll.create('2026-12',null);
+  const fresh = Extras.periodExtras(next,store,'staff','daily',true);
+  assert.equal(fresh.housing.amount,10000);
+  assert.equal(fresh.utilities.enabled,false);
+  assert.equal(fresh.utilities.amount,0);
+  assert.equal(Extras.standardDeduction(store,'staff','utilities'),undefined);
+});
