@@ -100,3 +100,29 @@ test('legacy monthly amounts are preserved and unset standards remain unconfigur
   assert.equal(fresh.utilities.amount,0);
   assert.equal(Extras.standardDeduction(store,'staff','utilities'),undefined);
 });
+
+test('disabling employee housing stops only standard deductions and preserves the amounts for re-enabling', () => {
+  const profile = {
+    housing:{amount:10000,enabled:true,reason:'',confirmed:false},
+    utilities:{amount:10000,enabled:true,reason:'',confirmed:false}
+  };
+  const store = {extraProfiles09:{staff:profile}};
+  const {period} = example();
+  const current = (draft, fresh = false) => Extras.periodExtras(draft,store,'staff','daily',fresh);
+  const amounts = extras => Extras.housingKeys.map(key => extras[key].enabled ? extras[key].amount : 0);
+  assert.equal(Extras.usesHousingDeductions(store,'unknown'),false);
+  assert.equal(Extras.usesHousingDeductions(store,'staff'),true);
+  period.extras09 = current(period,true);
+  assert.deepEqual(amounts(current(period)),[10000,10000]);
+  period.extras09.housing = {...period.extras09.housing,amount:5000,useStandard:false};
+  profile.housingEnabled144 = false;
+  assert.equal(Extras.usesHousingDeductions(store,'staff'),false);
+  assert.deepEqual(amounts(current(period)),[5000,0]);
+  const next = Payroll.create('2026-12',null);
+  assert.deepEqual(amounts(current(next,true)),[0,0]);
+  assert.equal(Extras.standardDeduction(store,'staff','utilities').amount,10000);
+  profile.housingEnabled144 = true;
+  assert.deepEqual(amounts(current(next,true)),[10000,10000]);
+  assert.deepEqual(amounts(current(period)),[5000,10000]);
+  Extras.validateStore(store,[{id:'staff'}]);
+});

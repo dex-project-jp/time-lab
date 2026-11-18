@@ -122,7 +122,7 @@ renderPay07 = function (keepRows = false) {
     $('#leaveAmount09').textContent = leave === null && preview !== null
       ? '参考 ' + yen(preview) + '（取得日と算定方式の確認待ち）' : yen(leave);
     for (const key of PayrollExtras.housingKeys) {
-      const standard = PayrollExtras.standardDeduction(payStore(),employee().id,key);
+      const standard = PayrollExtras.effectiveStandardDeduction(payStore(),employee().id,key);
       const label = standard ? '標準 '+yen(standard.enabled ? standard.amount : 0) : '標準未設定';
       deductionPanel09.querySelector('[data-deduction-status10="'+key+'"]').textContent =
         extra[key].useStandard ? label : '当月の保存額 ／ '+label;

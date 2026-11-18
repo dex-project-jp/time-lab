@@ -40,6 +40,17 @@ function standardDeduction(store, employeeId, key) {
   };
 }
 
+function usesHousingDeductions(store, employeeId) {
+  return store.extraProfiles09?.[employeeId]?.housingEnabled144 ??
+    housingKeys.some(key => standardDeduction(store,employeeId,key)?.enabled === true);
+}
+
+function effectiveStandardDeduction(store, employeeId, key) {
+  const standard = standardDeduction(store,employeeId,key);
+  if (standard && !usesHousingDeductions(store,employeeId)) return {...standard,enabled:false};
+  return standard;
+}
+
 function withStandard(saved) {
   return {amount:0,enabled:false,reason:'',confirmed:false,...saved,useStandard:true};
 }
@@ -51,7 +62,7 @@ function periodExtras(period, store, employeeId, mode, fresh = false) {
   for (const key of housingKeys) {
     const entry = extras[key];
     if (entry.useStandard === true || (!stored && (fresh || !find(period.deductions,key)))) {
-      extras[key] = withStandard(standardDeduction(store,employeeId,key));
+      extras[key] = withStandard(effectiveStandardDeduction(store,employeeId,key));
     }
   }
   return extras;
@@ -202,6 +213,9 @@ function validateStore(store, employees) {
     if (!object(store.extraProfiles09)) throw Error('従業員の支給・控除設定が不正です');
     for (const [id, profile] of Object.entries(store.extraProfiles09)) {
       if (!ids.has(id) || !object(profile)) throw Error('支給・控除設定の従業員が不正です');
+      if (profile.housingEnabled144 !== undefined && typeof profile.housingEnabled144 !== 'boolean') {
+        throw Error('住宅・光熱費の利用設定が不正です');
+      }
       if (profile.deductionItems11 !== undefined) {
         if (!object(profile.deductionItems11) || Object.keys(profile.deductionItems11).length > 100) throw Error('翌月用控除設定が不正です');
         for (const [key,item] of Object.entries(profile.deductionItems11)) {
@@ -240,6 +254,6 @@ function validateStore(store, employees) {
   }
 }
 
-root.PayrollExtras = {labels, find, defaults, housingKeys, standardDeduction, periodExtras, calculate, calculateLeave, validateStore};
+root.PayrollExtras = {labels, find, defaults, housingKeys, standardDeduction, usesHousingDeductions, effectiveStandardDeduction, periodExtras, calculate, calculateLeave, validateStore};
 if (typeof module !== 'undefined') module.exports = root.PayrollExtras;
 })(typeof window !== 'undefined' ? window : globalThis);
