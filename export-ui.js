@@ -51,7 +51,7 @@ function showExportFile(file, label, preview) {
   $('#payrollExportActions').append(exportButton(label + 'を書き出す', () => download(file.name, file, file.type)));
 }
 
-async function openPayrollExport(forCompany, historical = null, combined = false) {
+async function openPayrollExport(forCompany, historical = null, combined = false, {pdfOnly=false} = {}) {
   if (!state || (!historical && !payPeriod())) {
     $('#payrollExportNotice').textContent = '給与を作成してから出力してください。';
     return;
@@ -76,7 +76,7 @@ async function openPayrollExport(forCompany, historical = null, combined = false
   exportOther.open = false;
   exportSend.disabled = true;
   exportSend.onclick = null;
-  exportSend.textContent = (forCompany || combined) ? 'この内容で送る' : 'PDFとExcelを送る';
+  exportSend.textContent = pdfOnly ? 'PDFを共有' : (forCompany || combined) ? 'この内容で送る' : 'PDFとExcelを送る';
   exportStatus.textContent = '添付ファイルを準備しています…';
   $('#payrollExportContext').textContent = historical ? historical.name+' / '+historical.month : employee().name+' / '+salaryMonth();
   exportDialog.showModal();
@@ -92,7 +92,7 @@ async function openPayrollExport(forCompany, historical = null, combined = false
     const pdf = await PayrollExport.pdf(model);
     if (!current()) return;
     const attachments = [{file:pdf, label:'給与明細PDF'}];
-    if (combined || !forCompany) attachments.push({file:await PayrollExport.workbook(model), label:'給与明細Excel'});
+    if (!pdfOnly && (combined || !forCompany)) attachments.push({file:await PayrollExport.workbook(model), label:'給与明細Excel'});
     if (forCompany || combined) {
       const missing = [];
       for (const slot of selectedPair().reverse()) {
@@ -113,6 +113,7 @@ async function openPayrollExport(forCompany, historical = null, combined = false
     const files = attachments.map(({file}) => file);
     attachments.forEach(({file, label, preview}) => showExportFile(file, label, preview));
     exportOther.hidden = false;
+    if (pdfOnly) exportOther.open = true;
     if (shareableFiles(files)) {
       exportSend.onclick = () => {
         if (current()) return sharePayrollFiles(files, current, fallback, forCompany || combined);

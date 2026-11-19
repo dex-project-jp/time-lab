@@ -360,32 +360,50 @@ $('#slipInclude09').onclick = async () => {
   }
 };
 
+const historyPdf09 = (() => {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = 'PDFを出力';
+  button.hidden = true;
+  $('#printPeriodNow').after(button);
+  return button;
+})();
+function showPayrollSlip09(name,p,result,saved,{pdf=null}={}) {
+  clearSlipBank09();
+  slipOptions09.hidden = !!pdf;
+  $('#printPeriodNow').hidden = !!pdf;
+  historyPdf09.hidden = !pdf;
+  historyPdf09.onclick = pdf;
+  $('#periodSlip > p.print-actions').hidden = !!pdf;
+  const table = (title, items, total) => `<table><thead><tr><th>${title}</th><th>金額</th></tr></thead><tbody>
+    ${items.filter(item => item.amount !== 0).map(item => `<tr><td>${esc(earningName(item))}</td><td>${slipItemAmount(item.amount)}</td></tr>`).join('')}
+    <tr><th>${title}総額</th><th>${yen(total)}</th></tr></tbody></table>`;
+  const day = result.dayPay;
+  $('#periodSlipBody').innerHTML = `<article class="slip09">
+    <h1>${p.month} 給与明細</h1>
+    <p><strong>${esc(name)}</strong>　${saved ? '確定済み' : '確認用プレビュー・未確定'}</p>
+    <p>対象期間 ${p.start}〜${p.end}　支払日 ${esc(result.settings?.payDate)}</p>
+    <p>${result.options?.mode==='fixed' ? '固定給' : day ? `通常出勤 ${day.regularDays}日　土曜出勤 ${day.saturdayDays}日` : `実働 ${hm(result.summary.minutes)}　給与計算用 ${hm(result.summary.payroll)}`}</p>
+    <div class="slipTables09">${table('支給',result.earnings,result.gross)}${table('控除',result.deductions,result.deductionTotal)}</div>
+    ${result.deductionTotal === null ? `<p>確認済み控除小計　<strong>${yen(result.knownDeduction ?? result.deductionTotal ?? 0)}</strong></p>` : ''}
+    ${result.taxRefund > 0 ? `<p>還付金（当月調整）　<strong>${yen(result.taxRefund)}</strong></p>` : ''}
+    <p class="slipNet09">差引支給額　<strong>${yen(result.net)}</strong></p>
+
+    ${result.errors?.length ? `<p>要確認　${esc(result.errors.join(' / '))}</p>` : ''}
+  </article>`;
+  document.body.classList.add('period-print');
+  $('#periodSlip').showModal();
+}
 $('#periodPrint').onclick = function () {
   clearSlipBank09();
+  slipOptions09.hidden = false;
+  $('#printPeriodNow').hidden = false;
+  historyPdf09.hidden = true;
+  $('#periodSlip > p.print-actions').hidden = false;
   slipEmployee09 = employee().id;
   if (!payPeriod()) return priorPrint09();
   try {
-    const result = livePay();
-    const p = PeriodCore.period(salaryMonth());
-    const saved = !!payPeriod().snapshot;
-    const table = (title, items, total) => `<table><thead><tr><th>${title}</th><th>金額</th></tr></thead><tbody>
-      ${items.filter(item => item.amount !== 0).map(item => `<tr><td>${esc(earningName(item))}</td><td>${slipItemAmount(item.amount)}</td></tr>`).join('')}
-      <tr><th>${title}総額</th><th>${yen(total)}</th></tr></tbody></table>`;
-    const day = result.dayPay;
-    $('#periodSlipBody').innerHTML = `<article class="slip09">
-      <h1>${p.month} 給与明細</h1>
-      <p><strong>${esc(employee().name)}</strong>　${saved ? '確定済み' : '確認用プレビュー・未確定'}</p>
-      <p>対象期間 ${p.start}〜${p.end}　支払日 ${esc(result.settings.payDate)}</p>
-      <p>${result.options?.mode==='fixed' ? '固定給' : day ? `通常出勤 ${day.regularDays}日　土曜出勤 ${day.saturdayDays}日` : `実働 ${hm(result.summary.minutes)}　給与計算用 ${hm(result.summary.payroll)}`}</p>
-      <div class="slipTables09">${table('支給',result.earnings,result.gross)}${table('控除',result.deductions,result.deductionTotal)}</div>
-      ${result.deductionTotal === null ? `<p>確認済み控除小計　<strong>${yen(result.knownDeduction ?? result.deductionTotal ?? 0)}</strong></p>` : ''}
-      ${result.taxRefund > 0 ? `<p>還付金（当月調整）　<strong>${yen(result.taxRefund)}</strong></p>` : ''}
-      <p class="slipNet09">差引支給額　<strong>${yen(result.net)}</strong></p>
-
-      ${result.errors.length ? `<p>要確認　${esc(result.errors.join(' / '))}</p>` : ''}
-    </article>`;
-    document.body.classList.add('period-print');
-    $('#periodSlip').showModal();
+    showPayrollSlip09(employee().name,PeriodCore.period(salaryMonth()),livePay(),!!payPeriod().snapshot);
   } catch (error) {
     payStatus(error.message);
   }

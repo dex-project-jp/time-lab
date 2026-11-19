@@ -56,7 +56,7 @@ $('#freezePay07').onclick = async () => {
   try {
     const inputs = document.querySelectorAll('#pay07Earnings input,#pay07Deductions input,#specialPayPanel input,.housing-deductions input');
     if ([...inputs].some(input=>!input.disabled && !input.reportValidity())) throw Error('項目名・金額を確認してください');
-    snapshot = PayrollCore.freeze(period,livePay(),new Date().toISOString());
+    snapshot = PayrollCore.freeze(period,{...livePay(),employeeName:employee().name},new Date().toISOString());
     delete period.attendanceRevisionPending;
     await persistState();
     renderPay07();

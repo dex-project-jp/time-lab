@@ -235,3 +235,16 @@ input:is([type=month],[type=date],[type=time])::-webkit-date-and-time-value{
 .housing-deductions{min-inline-size:0;margin:14px 0}
 .housing-deductions small{display:block;color:var(--muted)}
 #housingDeductionStatus:empty{display:none}
+
+
+.history-pay-card {
+  min-width: 0;
+  padding: 14px;
+  margin: 0 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+.history-pay-card p { margin: 5px 0; }
+.history-pay-amount { color: var(--gold); font-size: 1.2rem; font-weight: 700; }
+.history-pay-card button { margin-top: 8px; min-height: 44px; }

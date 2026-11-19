@@ -19,71 +19,102 @@
 
   function collectHistory() {
     const entries = [];
+    const store = state?.payrollV07?.periods ?? {};
+    const legacy = state?.fixedPayrollSync;
     for (const person of state?.employees ?? []) {
       const prefix = person.id+':';
-      const records = new Map();
-      for (const [key,period] of Object.entries(state.payrollV07?.periods ?? {})) {
-        if (!key.startsWith(prefix)) continue;
-        const month = key.slice(prefix.length);
-        const versions = (period.revisions ?? []).map(snapshot=>({snapshot,previous:true}));
-        if (period.snapshot) versions.push({snapshot:period.snapshot,previous:false});
-        if (versions.length) records.set(month,versions.reverse());
-      }
-      const legacy = state.fixedPayrollSync;
+      const months = new Set(Object.keys(store).filter(key=>key.startsWith(prefix)).map(key=>key.slice(prefix.length)));
       if (legacy?.employee?.id===person.id) {
-        for (const month of Object.keys(legacy.months)) {
-          if (records.has(month)) continue;
-          const snapshot = window.legacyFixedPeriod132(person.id,month)?.snapshot;
-          if (snapshot) records.set(month,[{snapshot,previous:false}]);
-        }
+        for (const month of Object.keys(legacy.months)) months.add(month);
       }
-      for (const [month,versions] of records) {
-        for (const version of versions) entries.push({...version,id:person.id,name:person.name,month,past:!!person.archivedAt132});
+      for (const month of months) {
+        const period = store[prefix+month];
+        const saved = period?.snapshot ?? period?.revisions?.at(-1);
+        const snapshot = saved ?? window.legacyFixedPeriod132(person.id,month)?.snapshot;
+        if (!snapshot) continue;
+        entries.push({
+          id:person.id,month,snapshot,past:!!person.archivedAt132,
+          name:snapshot.employeeName ?? (saved ? person.name : legacy.employee.name),
+          previous:(period?.revisions ?? []).filter(version=>version!==snapshot).slice().reverse(),
+          pending:!period?.snapshot && !!period?.revisions?.length
+        });
       }
     }
-    return entries.sort((a,b)=>b.month.localeCompare(a.month)||a.name.localeCompare(b.name,'ja'));
+    return entries;
+  }
+
+  function syncStatusFor(entry) {
+    try {
+      const receipt = JSON.parse(localStorage.getItem('time-lab-sync-receipt:'+entry.id+':'+entry.month));
+      if (receipt?.version===entry.snapshot.at) {
+        if (receipt.status==='done') return '同期済み';
+        if (receipt.status==='failed') return '同期失敗';
+        if (receipt.status==='pending') return 'Googleで同期待ち';
+      }
+    } catch { /* The saved payroll remains readable when storage is unavailable. */ }
+    return '未同期';
   }
 
   function historyCard(entry) {
-    const {name,month,snapshot,previous,past} = entry;
-    const item = document.createElement('details');
-    const title = document.createElement('summary');
-    title.textContent = `${month} · ${name} · 差引 ${yen(snapshot.net)}`;
-    const body = document.createElement('div');
-    const period = PeriodCore.period(month);
-    const summary = document.createElement('p');
-    summary.textContent = `${period.start}〜${period.end} · ${previous?'確定履歴':'確定済み'}${past?' · 過去の従業員':''}`;
-    const totals = document.createElement('p');
-    totals.textContent = `支給 ${yen(snapshot.gross)} ／ 控除 ${yen(snapshot.deductionTotal)} ／ 差引 ${yen(snapshot.net)}`;
-    body.append(summary,totals);
-    for (const [label,items] of [['支給明細',snapshot.earnings],['控除明細',snapshot.deductions]]) {
-      const lines = (items ?? []).filter(line=>line.amount!==0 && line.enabled!==false);
-      if (!lines.length) continue;
-      const heading = document.createElement('h3');
-      heading.textContent = label;
-      const list = document.createElement('ul');
-      for (const line of lines) {
-        const row = document.createElement('li');
-        row.textContent = `${label==='支給明細'?earningName(line):line.name} ${yen(line.amount)}`;
-        list.append(row);
+    const {name,month,snapshot,pending,past} = entry;
+    const item = document.createElement('article');
+    item.className = 'history-pay-card';
+    const title = document.createElement('h3');
+    title.textContent = name;
+    const meta = document.createElement('p');
+    const modes = {daily:'日給月給',hourly:'時給',fixed:'固定給'};
+    meta.textContent = [modes[snapshot.options?.mode],past?'過去の従業員':''].filter(Boolean).join(' · ');
+    const amount = document.createElement('p');
+    amount.className = 'history-pay-amount';
+    amount.textContent = '差引支給額 '+yen(snapshot.net);
+    const status = document.createElement('p');
+    status.textContent = (pending ? '前回確定分・再確定待ち' : '確定済み')+' · '+syncStatusFor(entry);
+    item.append(title,amount);
+    if (meta.textContent) item.append(meta);
+    const open = (version,versionName) => {
+      const historical = {...entry,snapshot:version,name:versionName};
+      showPayrollSlip09(versionName,PeriodCore.period(month),version,true,{
+        pdf:()=>openPayrollExport(false,historical,false,{pdfOnly:true})
+      });
+    };
+    item.append(status,exportButton('給与明細を見る',()=>open(snapshot,name)));
+    if (entry.previous.length) {
+      const previous = document.createElement('details');
+      const heading = document.createElement('summary');
+      heading.textContent = '以前の確定版';
+      previous.append(heading);
+      for (const version of entry.previous) {
+        const date = new Date(version.at);
+        const label = Number.isNaN(date.getTime()) ? '' : date.toLocaleString('ja-JP');
+        previous.append(exportButton(label ? label+'の明細' : '明細を見る',
+          ()=>open(version,version.employeeName ?? name)));
       }
-      body.append(heading,list);
+      item.append(previous);
     }
-    body.append(exportButton('PDF・Excelを再出力',()=>openPayrollExport(false,entry)));
-    item.append(title,body);
     return item;
   }
 
+  const dateText = date => date.replace(/^(\d+)-(\d+)-(\d+)$/,(_,year,month,day)=>year+'年'+Number(month)+'月'+Number(day)+'日');
   function renderHistory() {
     const entries = collectHistory();
-    const months = [...new Set(entries.map(entry=>entry.month))];
-    options(historyMonth,months.map(month=>[month,month]),'すべての月');
-    const people = [...new Map(entries.map(entry=>[entry.id,entry.name+(entry.past?'（過去）':'')]))];
-    options(historyEmployee,people,'すべての従業員');
-    const matches = entries.filter(entry=>(!historyMonth.value || entry.month===historyMonth.value) &&
-      (!historyEmployee.value || entry.id===historyEmployee.value));
+    if (!historyMonth.value) {
+      historyMonth.value = entries.map(entry=>entry.month).sort().at(-1) ?? salaryMonth();
+    }
+    const month = historyMonth.value;
+    const [year,number] = month.split('-');
+    $('#historyPeriod14').textContent = '';
+    try {
+      const period = PeriodCore.period(month);
+      $('#historyPeriod14').textContent = year+'年'+Number(number)+'月給与｜'+dateText(period.start)+'〜'+dateText(period.end);
+    } catch {
+      historyRecords.textContent = '給与対象月を選択してください。';
+      return;
+    }
+    const people = new Map(entries.map(entry=>[entry.id,entry.name+(entry.past?'（過去）':'')]));
+    options(historyEmployee,[...people],'すべての従業員');
+    const matches = entries.filter(entry=>entry.month===month && (!historyEmployee.value || entry.id===historyEmployee.value));
     historyRecords.replaceChildren(...matches.map(historyCard));
-    if (!matches.length) historyRecords.textContent = entries.length?'条件に合う確定給与はありません。':'確定済みの給与はまだありません。';
+    if (!matches.length) historyRecords.textContent = 'この条件の確定済み給与はありません。';
   }
 
   const taxImport = $('#importTaxTable');
