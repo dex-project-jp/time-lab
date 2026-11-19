@@ -483,8 +483,9 @@
       if (!baseInput.reportValidity()) return;
       updateFixedBase();
     }
-    await freeze();
-    if (payPeriod()?.snapshot) $('#outputActions132').scrollIntoView({block:'nearest'});
+    const saved = await freeze();
+    if (saved && payPeriod()?.snapshot) $('#outputActions132').scrollIntoView({block:'nearest'});
+    return saved;
   };
   const output = $('#exportPC12').parentElement;
   output.id = 'outputActions132';
