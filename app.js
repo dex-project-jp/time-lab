@@ -20,13 +20,14 @@ function persistState(){
   }));
   return saveQueue;
 }
-function save(){
+function save({strict=false}={}){
   for (const [key,month] of Object.entries(state.months)) {
     const employee = state.employees.find(person=>key.startsWith(person.id+':'));
     const config = month.settings || employee;
     if (config) month.calculated = {...TimeCore.summary(Object.values(month.rows),config.mode,config.rate),mode:config.mode,rate:config.rate,rounding:'monthly-ceil-15-minutes',updatedAt:new Date().toISOString()};
   }
-  return persistState().catch(error=>{toast('保存できません。バックアップを書き出してください');console.error(error)});
+  const pending = persistState();
+  return strict ? pending : pending.catch(error=>{toast('保存できません。バックアップを書き出してください');console.error(error)});
 }
 async function init(){if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));try{db=await new Promise((res,rej)=>{const r=indexedDB.open('time-lab',1);r.onupgradeneeded=()=>r.result.createObjectStore('data');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});state=await new Promise((res,rej)=>{const r=db.transaction('data').objectStore('data').get('state');r.onsuccess=()=>res(r.result||initial());r.onerror=()=>rej(r.error)});state.selected=employee()?.id??null;render();}catch(e){toast('端末内保存が利用できません');$('#work').innerHTML='<p>IndexedDBが利用できません。Safariの通常モードで開いてください。</p>';console.error(e)}}
 function render(){let e=config();$('#employee').innerHTML=state.employees.filter(x=>!x.archivedAt132).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');$('#employee').value=e.id;$('#employeeName').value=e.name;$('#month').value=state.month;$('#mode').value=e.mode;$('#rate').value=e.rate;$('#rateLabel').hidden=e.mode!=='hourly';renderRows();renderSummary();renderImages();if(typeof renderPayroll==='function')renderPayroll()}

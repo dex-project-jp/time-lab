@@ -21,11 +21,47 @@ if(!header&&/^\d{4}[-/年]/.test(line)){cells=line.split(/\s+/);header=true}if(!
 if(!cells&&/^\d{4}[-/年]/.test(line)){stack=[line];continue}if(!cells&&stack.length){stack.push(line);if(stack.length<5)continue;cells=stack;stack=[]}
 if(!cells)continue;if(!/^\d/.test(norm(cells[0])))continue;
 if(cells.length!==5)throw Error(`「${cells[0]}」の列数が${cells.length}です。日付と4時刻の5列をコピーしてください`);
-let m=norm(cells[0]).match(/^(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?(?:\s*[（(][日月火水木金土](?:曜(?:日)?)?[）)])?$/);if(!m)throw Error(`日付「${cells[0]}」に年・月・日が必要です。例: ${p.start}`);let date=m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');rows.push({date,times:cells.slice(1).map((x,j)=>time(x,date,j))})}
+let m=norm(cells[0]).match(/^(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?(?:\s*[（(][日月火水木金土](?:曜(?:日)?)?[）)])?$/);if(!m)throw Error(`日付「${cells[0]}」に年・月・日が必要です。例: ${p.start}`);let date=m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');const tokens=cells.slice(1);
+const times=tokens.map((x,j)=>time(x,date,j));
+const known=tokens.map((x,j)=>!!times[j] || /^(空欄|休み|休|なし)$/.test(norm(x)));
+rows.push({date,times,known})}
 if(stack.length)throw Error('表の末尾の列が不足しています。日付と4時刻をまとめてコピーしてください');if(!header||!rows.length)throw Error('日付・午前出勤・午前退勤・午後出勤・午後退勤の表が見つかりません。見出しから表全体をコピーしてください');
 return {name:names[0]||'',records:root.PeriodCore.parse(JSON.stringify({payrollMonth:salaryMonth,rows}),salaryMonth,employee.id)}}
 function validate(records,month,id){if(!records.length)throw Error('保存する日付がありません');let parsed=root.PeriodCore.parse(JSON.stringify({payrollMonth:month,employeeId:id,rows:records.map(r=>({date:r.date,times:r.times,am:r.am,pm:r.pm}))}),month,id);parsed.forEach((r,i)=>{let issues=root.TimeCore.inspect(r).errors;if(records[i].confirmed&&issues.length)throw Error(`${r.date}: ${issues.join(' / ')}。修正するか確認チェックを外してください`)});return parsed}
 function apply(state,id,month,records){let valid=validate(records,month,id),result=root.PeriodCore.apply(state,id,month,valid);for(let date of result.dates){let i=valid.findIndex(r=>r.date===date),r=state.months[id+':'+date.slice(0,7)].rows[+date.slice(8)];r.reviewed=!!records[i].confirmed;if(Array.isArray(records[i].raw))r.original=structuredClone(records[i].raw);r.importMethod='manual-chatgpt-table';r.note=r.reviewed?'写真と解析表を利用者が確認':'解析表から保存・写真との確認が必要'}result.confirmedExisting=0;for(let i=0;i<valid.length;i++){let v=valid[i],r=state.months[id+':'+v.date.slice(0,7)]?.rows[+v.date.slice(8)];if(r&&!r.reviewed&&records[i].confirmed&&JSON.stringify(r.times)===JSON.stringify(v.times)&&r.am===(v.am??!!(v.times[0]&&v.times[1]))&&r.pm===(v.pm??!!(v.times[2]&&v.times[3]))){r.reviewed=true;result.confirmedExisting++}}return result}
-function prompt(month){let p=root.PeriodCore.period(month);return `添付した同じ従業員のMAX S/ER-Sタイムカードを1〜2枚解析してください。写真がなければ写真未添付とだけ回答。別人を混ぜないでください。給与対象月${month}、15日締めの${p.start}〜${p.end}。カードに印刷された前半/後半より各行の実際の年月日を優先し、右端の時間数欄は打刻から除外。明確な手書き修正は修正後を優先し、不明な数字や日付は推測しない。回答を次の3つに分けてください。\n1. 従業員名・対象期間・読み取り概要（従業員名：氏名。不明なら不明）\n2. TIME LAB取り込み用コピー専用データ：言語指定なしのコードブロックを1つ作り、その中には日付と4時刻だけを記載。1日1行、YYYY-MM-DD HH:MM HH:MM HH:MM HH:MM。順番は午前出勤・午前退勤・午後出勤・午後退勤。不明/空欄の時刻は - 。見出し・氏名・説明・合計・確認事項はブロック内に入れない。日付を読めた写真内の行だけを日付順に、重複なしで記載。日付を読めない行は推測しない。JSONは不要。\n3. 不明時刻・手書き修正・確認事項はコードブロックの外に記載してください。コピー操作はChatGPTのコードブロックを利用するもので、TIME LABへの自動返送ではありません。`}
-root.TableCore={parse,validate,apply,prompt,time,editorTime};if(typeof module!=='undefined')module.exports=root.TableCore;
+// Older drafts conflated missing and unread cells. Require a fresh
+// photo check for any of those values before using them to erase a punch.
+function knownCells(row) {
+  if (row.selectionVersion === 1 && Array.isArray(row.known)) return row.known;
+  return row.times.map(Boolean);
+}
+
+function selectionIssue(row) {
+  if (knownCells(row).some(value => !value)) return '不明な打刻を入力するか、写真で空欄を確認してください';
+  return root.TimeCore.inspect(row).errors[0] ||
+    ([row.am,row.pm].some((present,index) => present && !row.times[index*2])
+      ? '出勤した区分の打刻を入力してください' : '');
+}
+
+function applySelected(state,id,month,records) {
+  const selected = records.filter(row => row.confirmed);
+  if (!selected.length) throw Error('反映する日付にチェックを入れてください');
+  for (const row of selected) {
+    const issue = selectionIssue(row);
+    if (issue) throw Error(row.date+'：'+issue+'。日付を開いて修正するかチェックを外してください。');
+  }
+  const valid = validate(selected,month,id);
+  const result = root.PeriodCore.apply(state,id,month,valid,{overwrite:true});
+  for (const draft of selected) {
+    const row = state.months[id+':'+draft.date.slice(0,7)].rows[+draft.date.slice(8)];
+    row.reviewed = true;
+    if (Array.isArray(draft.raw)) row.original = structuredClone(draft.raw);
+    row.importMethod = 'manual-chatgpt-table';
+    row.note = '写真と解析表を利用者が確認';
+    if (draft.manualPhotoEdit) row.manualPhotoEdit = true;
+  }
+  return result;
+}
+function prompt(month){let p=root.PeriodCore.period(month);return `添付した同じ従業員のMAX S/ER-Sタイムカードを1〜2枚解析してください。写真がなければ写真未添付とだけ回答。別人を混ぜないでください。給与対象月${month}、15日締めの${p.start}〜${p.end}。カードに印刷された前半/後半より各行の実際の年月日を優先し、右端の時間数欄は打刻から除外。明確な手書き修正は修正後を優先し、不明な数字や日付は推測しない。回答を次の3つに分けてください。\n1. 従業員名・対象期間・読み取り概要（従業員名：氏名。不明なら不明）\n2. TIME LAB取り込み用コピー専用データ：言語指定なしのコードブロックを1つ作り、その中には日付と4時刻だけを記載。1日1行、YYYY-MM-DD HH:MM HH:MM HH:MM HH:MM。順番は午前出勤・午前退勤・午後出勤・午後退勤。打刻がないと明確に確認できるセルは「空欄」、読めないセルは「不明」と記載し、区別してください。見出し・氏名・説明・合計・確認事項はブロック内に入れない。日付を読めた写真内の行だけを日付順に、重複なしで記載。日付を読めない行は推測しない。JSONは不要。\n3. 不明時刻・手書き修正・確認事項はコードブロックの外に記載してください。コピー操作はChatGPTのコードブロックを利用するもので、TIME LABへの自動返送ではありません。`}
+root.TableCore={parse,validate,apply,applySelected,knownCells,selectionIssue,prompt,time,editorTime};if(typeof module!=='undefined')module.exports=root.TableCore;
 })(typeof window!=='undefined'?window:globalThis);

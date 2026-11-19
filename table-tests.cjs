@@ -20,3 +20,42 @@ test('manual editor normalizes numeric input and protects invalid times',()=>{
  assert.deepEqual(['０８３０','905','14:00',''].map((v,i)=>T.editorTime(v,d,i)),['08:30','09:05','14:00','']);
  for(const value of ['2400','0860','1','ab','-'])assert.throws(()=>T.editorTime(value,d,2),/午後出勤/);
 });
+
+test('selected replacement preserves unchecked and absent dates and recalculates minutes',()=>{
+ const s=state(), id=e.id, month='2026-11';
+ const select=(value,checked=true)=>read(value).map(r=>({...r,selectionVersion:1,confirmed:checked}));
+ T.applySelected(s,id,month,select('2026-10-22 06:00 09:00 14:00 17:00\n2026-10-23 06:00 09:00 14:00 17:00\n2026-10-24 06:00 09:00 14:00 17:00\n2026-10-25 06:00 09:00 14:00 17:00'));
+ const rows=select('2026-10-22 06:00 09:00 14:00 17:10\n2026-10-23 空欄 空欄 空欄 空欄\n2026-10-24 06:00 09:00 14:00 17:30');
+ rows[0].times[3]='17:12';
+ rows[2].confirmed=false;
+ const bucket=s.months[id+':2026-10'];
+ const other={...e,id:'b'.repeat(32)};
+ s.employees.push(other);
+ T.applySelected(s,other.id,month,select('2026-10-23 08:00 10:00 空欄 空欄'));
+ const otherBefore=JSON.stringify(s.months[other.id+':2026-10']);
+ assert.equal(T.applySelected(s,id,month,rows).replaced,2);
+ assert.equal(bucket.rows[22].times[3],'17:12');
+ assert.equal(bucket.rows[22].history[0].times[3],'17:00');
+ assert.deepEqual(bucket.rows[23].times,['','','','']);
+ assert.equal(bucket.rows[23].reviewed,true);
+ assert.equal(bucket.rows[24].times[3],'17:00');
+ assert.equal(bucket.rows[25].times[3],'17:00');
+ assert.equal(JSON.stringify(s.months[other.id+':2026-10']),otherBefore);
+ const wage=TimeCore.summary(PeriodCore.rows(s,id,month),'hourly',1200);
+ assert.equal(wage.minutes,1092);
+ assert.equal(wage.payroll,1095);
+ assert.equal(TimeCore.summary(PeriodCore.rows(s,id,month),'daily',0).days,3);
+ T.applySelected(s,id,month,rows);
+ assert.equal(Object.keys(bucket.rows).length,4);
+ assert.equal(bucket.rows[22].history.length,1);
+});
+
+test('unread or ambiguous blanks block a selected replacement until resolved',()=>{
+ const s=state();
+ const rows=read('2026-10-23 空欄 空欄 空欄 空欄\n2026-10-24 - 不明 - -').map(r=>({...r,selectionVersion:1,confirmed:true}));
+ assert.deepEqual(rows[0].known,[true,true,true,true]);
+ assert.throws(()=>T.applySelected(s,e.id,'2026-11',rows),/2026-10-24/);
+ assert.deepEqual(s.months,{});
+ rows[1].confirmed=false;
+ assert.equal(T.applySelected(s,e.id,'2026-11',rows).added,1);
+});

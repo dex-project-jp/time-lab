@@ -297,6 +297,13 @@
         const stored = saved.draft;
         if (stored && stored.id+':'+stored.month===key && Array.isArray(stored.rows)) {
           TableCore.validate(stored.rows,stored.month,stored.id);
+          if (!tablePhotosMatch(stored)) {
+            discardTableForNewPhoto();
+            return true;
+          }
+          for (const row of stored.rows) {
+            if (row.selectionVersion !== 1) row.confirmed = false;
+          }
           tableDraft = stored;
           showTableDraft();
           $('#saveTable').disabled = false;
