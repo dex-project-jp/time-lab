@@ -79,43 +79,6 @@
   });
   cancel.onclick = () => { if (!busy) dialog.close(); };
 
-  const amounts = result => JSON.stringify([
-    result.gross,result.deductionTotal,result.net,
-    ...['earnings','deductions'].map(side=>(result[side] ?? []).filter(item=>item.amount!==0)
-      .map(item=>[item.id,item.amount]).sort((a,b)=>String(a[0]).localeCompare(String(b[0]))))
-  ]);
-
-  function recalculate(previous,updated,employeeId,months) {
-    const selectedMonth = $('#salaryMonth');
-    const priorMonth = selectedMonth.value;
-    const revised = [];
-    try {
-      for (const month of months) {
-        const key = employeeId+':'+month;
-        const period = previous.payrollV07?.periods?.[key];
-        if (!period?.snapshot) continue;
-        const draft = {...period,snapshot:null};
-        selectedMonth.value = month;
-        let before, after;
-        try {
-          state = {...previous,payrollV07:{...previous.payrollV07,periods:{...previous.payrollV07.periods,[key]:draft}}};
-          before = livePay();
-          state = {...updated,payrollV07:{...updated.payrollV07,periods:{...updated.payrollV07.periods,[key]:draft}}};
-          after = livePay();
-        } catch { /* When recalculation cannot finish, keep the previous version in history. */ }
-        if (before && after && amounts(before)===amounts(after) && before.ready===after.ready) continue;
-        const replacement = {...period,revisions:[...(period.revisions ?? [])]};
-        PayrollCore.revise(replacement);
-        updated.payrollV07 = {...updated.payrollV07,periods:{...updated.payrollV07.periods,[key]:replacement}};
-        revised.push(month);
-      }
-    } finally {
-      state = previous;
-      selectedMonth.value = priorMonth;
-    }
-    return revised;
-  }
-
   remove.onclick = async () => {
     if (busy || !target) return;
     const {employeeId,period,month,id,rows} = target;
@@ -140,7 +103,7 @@
       PhotoRemoval.remove(updated,employeeId,month,id,includeRows);
       if (includeRows && current.rows.length) {
         delete updated.months[key].calculated;
-        revised = recalculate(previous,updated,employeeId,new Set(current.rows.map(row=>PhotoRemoval.salaryMonth(row.date))));
+        revised = PayrollCore.attendanceRevisions(updated).map(change=>change.key.slice(-7));
       }
       state = updated;
       await persistState();

@@ -11,6 +11,9 @@ function config(){return {...employee(),...monthData().settings}}
 function days(){return new Date(+state.month.slice(0,4),+state.month.slice(5),0).getDate()}
 function getRow(d){const m=monthData();return m.rows[d]||(m.rows[d]={day:d,times:['','','',''],am:false,pm:false,reviewed:false,original:[],note:'',sourceIds:[]})}
 function persistState(){
+  const periods = state.payrollV07?.periods;
+  const changes = typeof PayrollCore!=='undefined' ? PayrollCore.attendanceRevisions(state) : [];
+  for (const {key,next} of changes) periods[key] = next;
   const snapshot = structuredClone(state);
   saveQueue = saveQueue.catch(()=>{}).then(()=>new Promise((resolve,reject)=>{
     const transaction = db.transaction('data','readwrite');
@@ -18,7 +21,12 @@ function persistState(){
     transaction.oncomplete = resolve;
     transaction.onabort = () => reject(transaction.error);
   }));
-  return saveQueue;
+  return saveQueue.catch(error=>{
+    for (const {key,previous,next} of changes) {
+      if (periods[key]===next) periods[key] = previous;
+    }
+    throw error;
+  });
 }
 function save({strict=false}={}){
   for (const [key,month] of Object.entries(state.months)) {
@@ -29,7 +37,11 @@ function save({strict=false}={}){
   const pending = persistState();
   return strict ? pending : pending.catch(error=>{toast('保存できません。バックアップを書き出してください');console.error(error)});
 }
-async function init(){if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));try{db=await new Promise((res,rej)=>{const r=indexedDB.open('time-lab',1);r.onupgradeneeded=()=>r.result.createObjectStore('data');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});state=await new Promise((res,rej)=>{const r=db.transaction('data').objectStore('data').get('state');r.onsuccess=()=>res(r.result||initial());r.onerror=()=>rej(r.error)});state.selected=employee()?.id??null;render();}catch(e){toast('端末内保存が利用できません');$('#work').innerHTML='<p>IndexedDBが利用できません。Safariの通常モードで開いてください。</p>';console.error(e)}}
+async function init(){if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));try{db=await new Promise((res,rej)=>{const r=indexedDB.open('time-lab',1);r.onupgradeneeded=()=>r.result.createObjectStore('data');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});state=await new Promise((res,rej)=>{const r=db.transaction('data').objectStore('data').get('state');r.onsuccess=()=>res(r.result||initial());r.onerror=()=>rej(r.error)});state.selected=employee()?.id??null;
+if (typeof PayrollCore!=='undefined' && PayrollCore.attendanceRevisions(state).length) {
+  try { await persistState(); } catch { toast('再確定の状態を端末に保存できませんでした。'); }
+}
+render();}catch(e){toast('端末内保存が利用できません');$('#work').innerHTML='<p>IndexedDBが利用できません。Safariの通常モードで開いてください。</p>';console.error(e)}}
 function render(){let e=config();$('#employee').innerHTML=state.employees.filter(x=>!x.archivedAt132).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');$('#employee').value=e.id;$('#employeeName').value=e.name;$('#month').value=state.month;$('#mode').value=e.mode;$('#rate').value=e.rate;$('#rateLabel').hidden=e.mode!=='hourly';renderRows();renderSummary();renderImages();if(typeof renderPayroll==='function')renderPayroll()}
 const hm=n=>`${Math.floor(n/60)}時間${String(n%60).padStart(2,'0')}分`;
 function renderSummary(){let e=config(),s=TimeCore.summary(Array.from({length:days()},(_,i)=>getRow(i+1)),e.mode,e.rate);let cards=e.mode==='daily'?[['出勤日数',s.days+'日',`全日 ${s.full}日 / 半日 ${s.half}日`],['全日・半日',`${s.full} / ${s.half}`,'確認済みの出勤を集計'],['要確認',s.pending+'日','未確認・打刻の矛盾']]:[['実勤務時間',hm(s.minutes),'確認済み日・1分単位'],['給与計算用',hm(s.payroll),'月間合計を15分切り上げ'],['基本賃金',s.wage.toLocaleString()+'円',`時給 ${e.rate.toLocaleString()}円 · 要確認 ${s.pending}日`]];$('#summary').innerHTML=cards.map(([a,b,c])=>`<div class="metric"><small>${a}</small><strong>${b}</strong><span>${c}</span></div>`).join('')}

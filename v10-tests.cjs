@@ -126,3 +126,52 @@ test('disabling employee housing stops only standard deductions and preserves th
   assert.deepEqual(amounts(current(period)),[5000,10000]);
   Extras.validateStore(store,[{id:'staff'}]);
 });
+
+test('updated saved attendance creates a draft while preserving the prior payroll for reconfirmation', () => {
+  const employeeId = 'staff';
+  const month = '2026-11';
+  const key = employeeId+':'+month;
+  const state = {employees:[{id:employeeId,mode:'daily',rate:1200},{id:'peer'}],months:{},
+    payrollV07:{periods:{}}};
+  const period = Payroll.create(month,null,null,'サン');
+  const terms = {effectiveFrom:'2026-10-16',mode:'daily',rate:1200,specialSalary:0,
+    special:{...Payroll.specialDefaults('サン'),legalConfirmed:true,legalBasis:'テスト'}};
+  const dateGroups = [[],[]];
+  for (const date of Period.period(month).dates) {
+    dateGroups[new Date(date+'T00:00:00Z').getUTCDay()===4?1:0].push(date);
+  }
+  const attend = date => {
+    const bucket = state.months[employeeId+':'+date.slice(0,7)] ||= {rows:{}};
+    bucket.rows[+date.slice(8)] = {times:['06:00','10:00','14:00','18:00'],am:true,pm:true,reviewed:true};
+  };
+  dateGroups[0].slice(0,19).forEach(attend);
+  dateGroups[1].slice(0,3).forEach(attend);
+  const calculate = draft => {
+    const rows = Period.rows(state,employeeId,month);
+    const plan = Employee.plan(rows,month,[terms],terms,'2026-11-19');
+    return Extras.calculate(draft,Extras.defaults(draft,{},'daily'),plan,rows,table,0,true);
+  };
+  Object.assign(period.settings, {taxColumn:'kou',residency:'resident',insured:'no'});
+  const old = calculate(period);
+  assert.deepEqual([old.dayPay.regularDays,old.dayPay.saturdayDays,old.dayPay.base,old.dayPay.allowance],[19,3,182400,36000]);
+  Payroll.freeze(period,old,'2026-11-16T00:00:00Z');
+  state.payrollV07.periods[key] = period;
+  state.payrollV07.periods['peer:'+month] = {snapshot:{attendanceFingerprint:Payroll.attendanceKey(Period.rows(state,'peer',month))}};
+  assert.deepEqual(Payroll.attendanceRevisions(state),[]);
+  dateGroups[0].slice(19,22).forEach(attend);
+  dateGroups[1].slice(3,4).forEach(attend);
+  const [change,...others] = Payroll.attendanceRevisions(state);
+  assert.deepEqual(others,[]);
+  assert.equal(change.key,key);
+  assert.equal(change.next.attendanceRevisionPending,true);
+  assert.deepEqual(change.next.revisions,[period.snapshot]);
+  assert.equal(change.next.snapshot,null);
+  const persisted = JSON.parse(JSON.stringify(change.next));
+  const latest = calculate(persisted);
+  assert.deepEqual([latest.dayPay.regularDays,latest.dayPay.saturdayDays,latest.dayPay.base,latest.dayPay.allowance],[22,4,211200,48000]);
+  Payroll.freeze(persisted,latest,'2026-11-19T00:00:00Z');
+  state.payrollV07.periods[key] = persisted;
+  assert.equal(persisted.snapshot.revision,2);
+  assert.equal(persisted.revisions[0].dayPay.base,182400);
+  assert.deepEqual(Payroll.attendanceRevisions(state),[]);
+});

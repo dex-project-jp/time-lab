@@ -83,6 +83,10 @@
   salaryPanel.dataset.stepPanel = '3';
   const review = document.createElement('div');
   review.id = 'stepReviewSummary';
+  const recalculationNotice = document.createElement('p');
+  recalculationNotice.className = 'notice';
+  recalculationNotice.textContent = '勤怠更新後の給与を表示しています。前回の確定額は履歴に残っています。STEP 4で再確定してください。';
+  $('#pay07Totals').before(recalculationNotice);
   $('#pay07Totals').after(review,deductionPanel09);
   const payStatusNode = $('#pay07Status');
   const issues = $('#pay07Issues');
@@ -143,6 +147,7 @@
 
   function statusFor(person,month) {
     const key = person.id+':'+month;
+    if (payStore().periods?.[key]?.attendanceRevisionPending) return '再確定が必要';
     const row = rowFor(person,month);
     if (row) return syncLabel(person.id,month,row);
     const recorded = PeriodCore.rows(state,person.id,month).some(r=>r.reviewed || r.am || r.pm || r.times?.some(Boolean));
@@ -202,7 +207,11 @@
     if (!$('#salaryMonth').value) $('#salaryMonth').value = month;
     $('#salaryMonth').closest('label').hidden = false;
     selectionCards(person,month);
-    const locked = Boolean(person && payPeriod()?.snapshot);
+    const period = person && payPeriod();
+    const locked = Boolean(period?.snapshot);
+    const recheck = Boolean(!locked && period?.attendanceRevisionPending);
+    recalculationNotice.hidden = !recheck;
+    freeze.textContent = recheck ? '給与を再確定' : '給与を確定';
     if (!person) step = 1;
     if (person?.archivedAt132 && step<3) step = 3;
     if (step===5 && !locked) step = 4;
@@ -248,7 +257,7 @@
     }
     summary(confirmSummary,person,month,result);
     summary(sendSummary,person,month,result);
-    confirmStatus.textContent = locked ? '確定済み。送信は次のステップで行います。' : (issues.textContent || payStatusNode.textContent);
+    confirmStatus.textContent = locked ? '確定済み。送信は次のステップで行います。' : (issues.textContent || (recheck ? '勤怠が更新されました。給与を再確定してください。' : payStatusNode.textContent));
     const row = rowFor(person,month);
     syncState.textContent = row ? syncLabel(person.id,month,row) : '';
     const receipt = get(receiptPrefix+person.id+':'+month);
@@ -262,7 +271,8 @@
     step = Math.max(1,Math.min(5,number));
     if (step===4 && !payPeriod()) step = 3;
     if (step===5 && !payPeriod()?.snapshot) step = 4;
-    refresh();
+    if (step===3) renderPay07();
+    else refresh();
     if (activeKey && step>1) put(stepPrefix+activeKey,step);
     if (scroll) {
       const section = work.querySelector('[data-step-panel="'+step+'"]');
@@ -376,11 +386,12 @@
   };
   const freezeAction = freeze.onclick;
   freeze.onclick = async () => {
-    await freezeAction();
-    if (payPeriod()?.snapshot) {
-      put(receiptPrefix+payKey(),null);
-      show(5,true);
-    } else refresh();
+    const key = payKey();
+    freeze.disabled = true;
+    const saved = await freezeAction();
+    if (saved) put(receiptPrefix+key,null);
+    if (saved && key===payKey() && payPeriod()?.snapshot) show(5,true);
+    else refresh();
   };
   const reviseAction = revise.onclick;
   revise.onclick = async () => {
