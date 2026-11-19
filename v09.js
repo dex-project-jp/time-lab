@@ -32,7 +32,7 @@ payRows = function (side, period, result) {
   if (period.snapshot) return priorPayRows09(side, period, result);
   const extras = extrasFor09(period);
   const hiddenKeys = side === 'earnings'
-    ? [...(employeePlan().mode==='fixed' ? ['base','saturday'] : []), ...(extras.special.formula ? ['special'] : []), ...(extras.leave.touched ? ['leave'] : [])]
+    ? [...(employeePlan().mode==='fixed' ? ['base','saturday'] : []), ...(extras.special.formula || extras.special.manualAmount != null ? ['special'] : []), ...(extras.leave.touched ? ['leave'] : [])]
     : ['housing','utilities'];
   const hidden = new Set(hiddenKeys.map(key => PayrollExtras.find(period[side],key)?.id).filter(Boolean));
   return priorPayRows09(side, {...period,[side]:period[side].filter(item => !hidden.has(item.id))}, result);
@@ -41,15 +41,6 @@ payRows = function (side, period, result) {
 const extrasPanel09 = document.createElement('section');
 extrasPanel09.className = 'extras09';
 extrasPanel09.innerHTML = `
-  <fieldset><legend>特別給与</legend>
-    <label><input type="checkbox" data-extra09="special.enabled"> 特別給与を使用する</label>
-    <label>今月の n <input inputmode="numeric" type="number" min="0" step="1" data-extra09="special.n"></label>
-    <output id="specialAmount09"></output>
-    <details><summary>計算式 A × n ＋ B の設定</summary>
-      <label>A（円） <input inputmode="numeric" type="number" min="0" step="1" data-extra09="special.a"></label>
-      <label>B（円） <input inputmode="numeric" type="number" min="0" step="1" data-extra09="special.b"></label>
-    </details>
-  </fieldset>
   <fieldset><legend>有給休暇手当</legend>
     <label><input type="checkbox" data-extra09="leave.enabled"> 有給休暇手当を使用する</label>
     <div id="leaveInputs09">
@@ -60,6 +51,25 @@ extrasPanel09.innerHTML = `
     <output id="leaveAmount09"></output>
   </fieldset>`;
 $('#pay07Earnings').before(extrasPanel09);
+
+const monthlySpecial148 = document.createElement('section');
+monthlySpecial148.className = 'extras09 monthly-special148';
+monthlySpecial148.innerHTML = `
+  <fieldset><legend>特別給与</legend>
+    <label>今月の金額（円）
+      <input id="monthlySpecialAmount148" data-extra09="special.manualAmount" type="number" inputmode="numeric" min="0" max="1000000000" step="1">
+    </label>
+    <small id="specialAmount09"></small>
+    <details><summary>計算式・翌月の設定</summary>
+      <button class="secondary" type="button" id="resetSpecial148">今月の手入力を解除</button>
+      <label><input type="checkbox" data-extra09="special.enabled"> 特別給与の計算式を使用する</label>
+      <label>今月の n <input inputmode="numeric" type="number" min="0" step="1" data-extra09="special.n"></label>
+      <label>A（円・翌月も使用） <input inputmode="numeric" type="number" min="0" step="1" data-extra09="special.a"></label>
+      <label>B（円・翌月も使用） <input inputmode="numeric" type="number" min="0" step="1" data-extra09="special.b"></label>
+    </details>
+    <p id="specialStatus148" role="status" hidden></p>
+  </fieldset>`;
+$('#dayPaySummary').after(monthlySpecial148);
 
 const deductionPanel09 = document.createElement('div');
 deductionPanel09.className = 'extras09';
@@ -81,26 +91,15 @@ function extraResult09(result, key) {
 }
 
 renderPay07 = function (keepRows = false) {
-  // Keep monthly input nodes intact when the legacy renderer refreshes its rows.
-  if (!keepRows) $('#pay07Earnings').before(extrasPanel09);
   priorRenderPay09(keepRows);
   const period = payPeriod();
   if (!period) return;
   const locked = !!period.snapshot;
   const extra = period.snapshot?.extras09 ?? extrasFor09(period);
-  extrasPanel09.hidden = deductionPanel09.hidden = locked;
-  if (!locked) {
-    const leading = PayrollExtras.find(period.earnings,'special')?.id;
-    const rows = [...$('#pay07Earnings').children].filter(row => row !== extrasPanel09);
-    const baseIds = new Set(period.earnings.filter(item => ['attendance','specialAttendance'].includes(item.source)).map(item => item.id));
-    const lastBase = rows.filter(row => baseIds.has(row.dataset.payId)).at(-1);
-    const legacySpecial = rows.find(row => row.dataset.payId === leading);
-    if (legacySpecial) legacySpecial.after(extrasPanel09);
-    else if (lastBase) lastBase.after(extrasPanel09);
-    else $('#pay07Earnings').prepend(extrasPanel09);
-  }
+  monthlySpecial148.hidden = extrasPanel09.hidden = deductionPanel09.hidden = locked;
   for (const input of document.querySelectorAll('[data-extra09]')) {
     const [key, field] = input.dataset.extra09.split('.');
+    if (field==='manualAmount') { input.disabled = locked; continue; }
     const value = extra[key][field];
     if (input.type === 'checkbox') input.checked = !!value;
     else if (input !== document.activeElement || !keepRows) {
@@ -116,7 +115,11 @@ renderPay07 = function (keepRows = false) {
   $('#leaveInputs09').hidden = !extra.leave.enabled;
   try {
     const result = livePay();
-    $('#specialAmount09').textContent = (extra.special.formula ? '' : '従来の設定額 · n の入力またはチェック操作で計算式に切替 · ') + yen(extraResult09(result,'special'));
+    const amountInput = $('#monthlySpecialAmount148');
+    if (amountInput!==document.activeElement) amountInput.value = extraResult09(result,'special') ?? '';
+    $('#specialAmount09').textContent = extra.special.manualAmount != null ? '当月のみ手入力' :
+      (extra.special.formula ? '計算式の金額' : '従業員設定の金額');
+    $('#resetSpecial148').hidden = extra.special.manualAmount == null;
     const leave = extraResult09(result,'leave');
     const preview = extra.leave.enabled && extra.leave.days !== null ? employeePlan().rate * 8 * extra.leave.days : null;
     $('#leaveAmount09').textContent = leave === null && preview !== null
@@ -137,6 +140,9 @@ async function editExtras09(event) {
   const input = event.target;
   const period = payPeriod();
   if (!input.dataset.extra09 || !period || period.snapshot) return;
+  const manual = input.id==='monthlySpecialAmount148';
+  const status = $('#specialStatus148');
+  if (manual) status.hidden = true;
   try {
     const [key, field] = input.dataset.extra09.split('.');
     const monthly = PayrollExtras.housingKeys.includes(key);
@@ -146,7 +152,7 @@ async function editExtras09(event) {
     let value = input.type === 'checkbox' ? input.checked : input.value;
     if (input.type === 'number') {
       if (!input.validity.valid) throw Error('入力範囲を確認してください');
-      value = input.value === '' && ['n','days'].includes(field) ? null :
+      value = input.value === '' && ['n','days','manualAmount'].includes(field) ? null :
         field === 'days' ? Number(input.value) : PayrollCore.money(input.value || 0);
     }
     extras[key][field] = value;
@@ -166,16 +172,17 @@ async function editExtras09(event) {
     if (key === 'special' && ['a','b'].includes(field)) profile[field] = value;
     const switchedSpecial = key === 'special' && !previous?.special.formula && extras.special.formula;
     const switchedLeave = key === 'leave' && !previous?.leave.touched;
-    renderPay07(!switchedSpecial && !switchedLeave);
-    if (monthly) await persistState();
+    renderPay07(!switchedSpecial && !switchedLeave && (!manual || (previous?.special.manualAmount != null)===(value != null)));
+    if (monthly || manual) await persistState();
     else await persistPay();
   } catch (error) {
-    if (deductionPanel09.contains(input)) $('#housingDeductionStatus').textContent = error.message;
+    if (manual) { status.textContent = error.message; status.hidden = false; }
+    else if (deductionPanel09.contains(input)) $('#housingDeductionStatus').textContent = error.message;
     else payStatus(error.message);
     $('#freezePay07').disabled = true;
   }
 }
-for (const panel of [extrasPanel09,deductionPanel09]) {
+for (const panel of [extrasPanel09,monthlySpecial148,deductionPanel09]) {
   panel.addEventListener('input', event => {
     if (event.target.type !== 'checkbox') editExtras09(event);
   });
@@ -183,6 +190,15 @@ for (const panel of [extrasPanel09,deductionPanel09]) {
     if (event.target.type === 'checkbox') editExtras09(event);
   });
 }
+
+$('#monthlySpecialAmount148').addEventListener('blur', event => {
+  if (event.target.validity.valid) renderPay07(true);
+});
+$('#resetSpecial148').onclick = () => {
+  const input = $('#monthlySpecialAmount148');
+  input.value = '';
+  return editExtras09({target:input});
+};
 
 deductionPanel09.addEventListener('focusout', event => {
   if (event.target.matches('input') && event.target.validity.valid) renderPay07(true);

@@ -87,7 +87,18 @@
   recalculationNotice.className = 'notice';
   recalculationNotice.textContent = '勤怠更新後の給与を表示しています。前回の確定額は履歴に残っています。STEP 4で再確定してください。';
   $('#pay07Totals').before(recalculationNotice);
-  $('#pay07Totals').after(review,deductionPanel09);
+  const autoPay = document.createElement('div');
+  autoPay.id = 'automaticPay148';
+  $('#dayPaySummary').after(autoPay);
+  monthlySpecial148.after(deductionPanel09);
+  const deductions = $('#deductionsFold08');
+  deductions.querySelector('summary').textContent = 'その他の支給・控除';
+  deductions.append(extrasPanel09,refund12);
+  $('#earningsFold08 summary').textContent = '支給明細の詳細編集';
+  $('#payrollOptions132 summary').textContent = '給与計算の詳細設定';
+  const body = $('#pay07Body');
+  $('#pay07Title').after(recalculationNotice);
+  body.append($('.pay-columns'),$('#payrollOptions132'),review,$('#pay07Totals'),subtotal12,$('#pay07Issues'));
   const payStatusNode = $('#pay07Status');
   const issues = $('#pay07Issues');
   const confirm = panel(4,'給与確定');
@@ -237,6 +248,15 @@
     }
     let result;
     try { result = payPeriod() ? livePay() : null; } catch { result = null; }
+    autoPay.replaceChildren();
+    if (result && !result.dayPay) {
+      for (const line of result.earnings.filter(item=>item.id==='base' || item.source==='attendance' ||
+          ((item.id==='saturday' || item.source==='specialAttendance') && item.amount!==0))) {
+        const text = document.createElement('p');
+        text.textContent = earningName(line)+' '+yen(line.amount);
+        autoPay.append(text);
+      }
+    }
     review.replaceChildren();
     if (result) {
       for (const [label,items] of [['支給',result.earnings],['控除',result.deductions]]) {
@@ -364,13 +384,44 @@
   };
   tableInput.addEventListener('input',()=>{
     draftLoadFailed = false;
+    if (state && employee()) readPastedTable148();
     persistDraft();
   });
-  const parse = $('#readTable').onclick;
-  $('#readTable').onclick = () => {
+
+  function showOcrDraft() {
+    if (step!==2 || scan?.test || scan?.employee!==employee()?.id || !scan?.image ||
+        !PeriodCore.period(salaryMonth()).dates.some(date=>date.startsWith(scan.month))) return false;
+    const allowed = new Set(PeriodCore.period(salaryMonth()).dates);
+    const records = candidates.filter(row=>!row.duplicate).map(row=>({
+      date:scan.month+'-'+String(row.day).padStart(2,'0'),
+      times:row.times,known:row.times.map(Boolean),raw:row.raw
+    })).filter(row=>allowed.has(row.date));
+    if (!records.length) return false;
+    TableCore.validate(records,salaryMonth(),employee().id);
+    tableInput.value = '';
     draftLoadFailed = false;
-    parse();
-    persistDraft();
+    prepareTableDraft(records,{id:scan.image.id,month:scan.month});
+    $('#importFold08').open = true;
+    $('#scanner').close();
+    $('#tablePreview').scrollIntoView({block:'start'});
+    return true;
+  }
+
+  for (const selector of ['#ocr','#runV04']) {
+    const control = $(selector);
+    const read = control.onclick;
+    control.onclick = async event => {
+      const previous = candidates;
+      await read.call(control,event);
+      if (previous!==candidates && !$('#apply').disabled) {
+        try { showOcrDraft(); } catch (error) { toast(error.message); }
+      }
+    };
+  }
+  const applyOcr = $('#apply').onclick;
+  $('#apply').onclick = async event => {
+    try { if (!showOcrDraft()) await applyOcr(event); }
+    catch (error) { toast(error.message); }
   };
   const saveTable = $('#saveTable').onclick;
   $('#saveTable').onclick = async () => {
@@ -381,6 +432,7 @@
       tableInput.value = '';
       persistDraft();
       renderAttendance();
+      $('#attendanceTop').scrollIntoView({block:'start'});
     }
     refresh();
   };

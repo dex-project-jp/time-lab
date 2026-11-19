@@ -175,3 +175,18 @@ test('updated saved attendance creates a draft while preserving the prior payrol
   assert.equal(persisted.revisions[0].dayPay.base,182400);
   assert.deepEqual(Payroll.attendanceRevisions(state),[]);
 });
+
+test('manual special pay overrides the formula for this period only, including zero', () => {
+  const {extra,run} = example();
+  assert.equal(run().earnings.find(item=>item.name==='特別給与').amount,40000);
+  extra.special.manualAmount = 60000;
+  assert.equal(run().earnings.find(item=>item.name==='特別給与').amount,60000);
+  assert.equal(run().gross,278400);
+  extra.special.n = 5;
+  extra.special.manualAmount = 0;
+  assert.equal(run().earnings.find(item=>item.name==='特別給与').amount,0);
+  const month = Payroll.create('2026-12',null);
+  assert.equal(Extras.defaults(month,{a:10000,b:10000},'daily',true).special.manualAmount,undefined);
+  extra.special.manualAmount = null;
+  assert.equal(run().earnings.find(item=>item.name==='特別給与').amount,60000);
+});

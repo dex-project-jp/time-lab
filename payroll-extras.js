@@ -85,7 +85,8 @@ function calculate(period, extras, plan, rows, table, legacySpecial, simple = fa
   const oldSpecial = find(effective.earnings, 'special');
   let specialAmount = !special.formula ? (legacySpecial ?? oldSpecial?.amount ?? 0) : 0;
   if (!special.enabled && special.formula) specialAmount = 0;
-  if (special.formula && special.enabled) {
+  if (special.manualAmount != null) specialAmount = money(special.manualAmount, labels.special);
+  else if (special.formula && special.enabled) {
     if (special.n === null && !simple) {
       specialAmount = null;
       issues.push('特別給与の n を入力してください');
@@ -240,6 +241,7 @@ function validateStore(store, employees) {
     money(extras.special.a);
     money(extras.special.b);
     if (extras.special.n !== null) money(extras.special.n);
+    if (extras.special.manualAmount != null) money(extras.special.manualAmount);
     for (const key of housingKeys) {
       deduction(extras[key]);
       if (extras[key].useStandard !== undefined && typeof extras[key].useStandard !== 'boolean') {

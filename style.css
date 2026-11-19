@@ -248,3 +248,17 @@ input:is([type=month],[type=date],[type=time])::-webkit-date-and-time-value{
 .history-pay-card p { margin: 5px 0; }
 .history-pay-amount { color: var(--gold); font-size: 1.2rem; font-weight: 700; }
 .history-pay-card button { margin-top: 8px; min-height: 44px; }
+
+.monthly-special148 input[data-extra09="special.manualAmount"] {
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: var(--gold);
+  min-height: 48px;
+}
+#automaticPay148 p { margin: 5px 0; font-weight: 700; }
+#editTableHours148 { margin-top: 12px; overflow-wrap: anywhere; }
+#work[data-pay-step="3"] #pay07Totals div:last-child {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+#tableDraftActions148 button { min-height: 44px; }
